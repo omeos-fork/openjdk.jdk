@@ -47,7 +47,6 @@ public class CodeBlob extends VMObject {
   private static CIntField     headerSizeField;
   private static CIntegerField contentOffsetField;
   private static CIntegerField codeOffsetField;
-  private static CIntegerField codeEndOffsetField;
   private static CIntField     frameCompleteOffsetField;
   private static CIntegerField frameSizeField;
   private static AddressField  oopMapsField;
@@ -70,7 +69,6 @@ public class CodeBlob extends VMObject {
     contentOffsetField       = type.getCIntegerField("_content_offset");
     codeOffsetField          = type.getCIntegerField("_code_offset");
     frameCompleteOffsetField = new CIntField(type.getCIntegerField("_frame_complete_offset"), 0);
-    codeEndOffsetField       = type.getCIntegerField("_code_end_offset");
     frameSizeField           = type.getCIntegerField("_frame_size");
     oopMapsField             = type.getAddressField("_oop_maps");
     mutableDataField         = type.getAddressField("_mutable_data");
@@ -96,11 +94,11 @@ public class CodeBlob extends VMObject {
 
   public Address contentBegin()   { return headerBegin().addOffsetTo(getContentOffset()); }
 
-  public Address contentEnd()     { return headerBegin().addOffsetTo(getCodeEndOffset()); }
+  public Address contentEnd()     { return headerBegin().addOffsetTo(getSize()); }
 
   public Address codeBegin()      { return headerBegin().addOffsetTo(getCodeOffset()); }
 
-  public Address codeEnd()        { return headerBegin().addOffsetTo(getCodeEndOffset()); }
+  public Address codeEnd()        { return headerBegin().addOffsetTo(getSize()); }
 
   public Address dataBegin()      { return mutableDataField.getValue(addr); }
 
@@ -113,8 +111,6 @@ public class CodeBlob extends VMObject {
   public int getCodeOffset()      { return (int) codeOffsetField.getValue(addr); }
 
   public long getFrameCompleteOffset() { return frameCompleteOffsetField.getValue(addr); }
-
-  public int getCodeEndOffset()   { return (int) codeEndOffsetField.getValue(addr); }
 
   // Sizes
   public int getSize()            { return (int) sizeField.getValue(addr); }
