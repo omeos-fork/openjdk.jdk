@@ -28,6 +28,12 @@
 #include "utilities/compilerWarnings.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+#if defined(LINUX)
+#include <malloc.h>
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
+
 #ifdef _WINDOWS
 #include "permitForbiddenFunctions_windows.hpp"
 #else
@@ -66,6 +72,17 @@ inline void* calloc(size_t nmemb, size_t size) { return ::calloc(nmemb, size); }
 inline void* realloc(void* ptr, size_t size) { return ::realloc(ptr, size); }
 
 inline char* strdup(const char* s) { return ::strdup(s); }
+
+inline char *strtok(char *str, const char *sep) { return ::strtok(str, sep); }
+inline long strtol(const char *str, char **endptr, int base) { return ::strtol(str, endptr, base); }
+
+#if defined(LINUX)
+  actual = permit_forbidden_function::malloc_usable_size(ptr);
+#elif defined(WINDOWS)
+  actual = permit_forbidden_function::_msize(ptr);
+#elif defined(__APPLE__)
+  inline size_t malloc_size(const void *ptr) { return ::malloc_size(ptr); }
+#endif
 
 END_ALLOW_FORBIDDEN_FUNCTIONS
 } // namespace permit_forbidden_function

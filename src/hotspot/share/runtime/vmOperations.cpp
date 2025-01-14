@@ -561,6 +561,7 @@ int VM_Exit::wait_for_threads_in_native_to_block() {
 }
 
 void VM_Exit::doit() {
+  NMT_LogRecorder::finish();
 
   if (VerifyBeforeExit) {
     HandleMark hm(VMThread::vm_thread());

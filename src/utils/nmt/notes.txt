@@ -1,0 +1,61 @@
+
+example:
+
+cd /Volumes/Work/bugs/8317453
+
+
+./build/xcode/build/jdk/bin/java \
+  -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary \
+  -XX:NMTRecordMemoryAllocations=0x7FFFFFFF -cp demos HelloWorld
+
+./build/xcode/build/jdk/bin/java \
+  -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary \
+  -XX:NMTRecordMemoryAllocations=0x7FFFFFFF -jar demos/J2Ddemo.jar
+
+./build/xcode/build/jdk/bin/java \
+  -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary \
+  -XX:NMTBenchmarkRecordedDir=. -XX:NMTBenchmarkRecordedPID=68705
+
+
+rm nmt/*.class ; javac nmt/Main.java ; java nmt.Main All /Users/gerard/Work/bugs/8337217/johan/build/xcode/build/jdk/bin/java /Users/gerard/Work/bugs/8337217/johan 68705
+rm nmt/*.class ; javac nmt/Main.java ; java nmt.Main MemoryHistograms ./jdk/build/xcode/build/jdk/bin/java . 83457
+rm nmt/*.class ; javac nmt/Main.java ; java nmt.Main PerformanceHistograms ./jdk/build/xcode/build/jdk/bin/java . 83457
+rm nmt/*.class ; javac nmt/Main.java ; java nmt.Main MemorySummary ./jdk/build/xcode/build/jdk/bin/java . 83457
+
+
+
+
+
+
+
+
+the process to create samples:
+
+
+./jdk/build/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=detail -XX:NMTRecordMemoryAllocations=2147483647 Main
+
+creates 3 files:
+
+CWD/hs_nmt_pidPID_info_record.log
+CWD/hs_nmt_pidPID_allocs_record.log
+CWD/hs_nmt_pidPID_threads_record.log
+
+
+./jdk/build/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NMTBenchmarkRecordedDir=CWD -XX:NMTBenchmarkRecordedPID=PID
+
+creates 1 file:
+
+CWD/hs_nmt_pid83457_benchmark.log
+
+and shows LOG_FILE_PATH,TOTAL_SAMPLES_DURATION,MAX_SAMPLE_DURATION:
+
+CWD/hs_nmt_pid83457_benchmark.log,1643193,30456
+
+
+to use samples to show memory statistics:
+
+rm *.class ; javac nmt.java ; java nmt.Main ./jdk/build/xcode/build/jdk/bin/java CWD PID
+
+
+
+

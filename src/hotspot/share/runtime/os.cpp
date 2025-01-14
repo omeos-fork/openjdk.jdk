@@ -662,6 +662,8 @@ void* os::malloc(size_t size, MemTag mem_tag, const NativeCallStack& stack) {
     return nullptr;
   }
 
+  NMT_MemoryLogRecorder::log_malloc(mem_tag, outer_size, outer_ptr, &stack);
+
   void* const inner_ptr = MemTracker::record_malloc((address)outer_ptr, size, mem_tag, stack);
 
   if (CDSConfig::is_dumping_static_archive()) {
@@ -732,6 +734,9 @@ void* os::realloc(void *memblock, size_t size, MemTag mem_tag, const NativeCallS
       header->revive();
       return nullptr;
     }
+
+    NMT_MemoryLogRecorder::log_realloc(mem_tag, new_outer_size, new_outer_ptr, header, &stack);
+
     // realloc(3) succeeded, variable header now points to invalid memory and we need to deaccount the old block.
     MemTracker::deaccount(free_info);
 
@@ -779,6 +784,8 @@ void  os::free(void *memblock) {
 
   // When NMT is enabled this checks for heap overwrites, then deaccounts the old block.
   void* const old_outer_ptr = MemTracker::record_free(memblock);
+
+  NMT_MemoryLogRecorder::log_free(old_outer_ptr);
 
   permit_forbidden_function::free(old_outer_ptr);
 }
