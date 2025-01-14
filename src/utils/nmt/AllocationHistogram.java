@@ -51,7 +51,7 @@ public class AllocationHistogram
             return ""+this.count+" "+this.overhead;
         }
     }
-    
+
     HashMap<Long, HistogramValue> map_requested;
     HashMap<Long, HistogramValue> map_actual;
 
@@ -144,7 +144,7 @@ public class AllocationHistogram
             this.total_overhead = 0;
             this.max_overhead = 0;
         }
-        
+
         if (totalOverheadRequested != totalOverheadActual)
         {
             throw new RuntimeException("totalOverheadRequested != totalOverheadActual ["+totalOverheadRequested+" != "+totalOverheadActual+"]");
