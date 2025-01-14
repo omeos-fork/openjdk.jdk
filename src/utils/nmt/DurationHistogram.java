@@ -246,11 +246,11 @@ public class DurationHistogram
     System.out.printf(String.format("summary \"free\" histogram of durations & count [#%,d]:\n",
                                     this.duration_count_free_total));
     printMap(width, this.duration_count_free, this.duration_count_free_max);
-    
+
     System.out.printf(String.format("summary \"malloc\" histogram of durations & count [#%,d]:\n",
                                     this.duration_count_malloc_total));
     printMap(width, this.duration_count_malloc, this.duration_count_malloc_max);
-    
+
     System.out.printf(String.format("summary \"realloc\" histogram of durations & count [#%,d]:\n",
                                     this.duration_count_realloc_total));
     printMap(width, this.duration_count_realloc, this.duration_count_realloc_max);
@@ -301,7 +301,7 @@ public class DurationHistogram
 
   void printCounters()
   {
-    System.out.printf(String.format(" max_count:%,d length:%,d total\n", 
+    System.out.printf(String.format(" max_count:%,d length:%,d total\n",
                                     this.size_count_malloc_max, this.size_count_malloc.size()));
   }
 

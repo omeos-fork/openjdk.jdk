@@ -121,7 +121,7 @@ public class BenchmarkRecorder
       System.err.println("\n\nrecording HelloWorld...");
       String rec_path = Path.of(recordings_path, "HelloWorld").toAbsolutePath().toString();
       Files.createDirectories(Path.of(rec_path));
-      
+
       String[] args = {"-cp", demos_path, "HelloWorld"};
       print_best_record(mode, rec_path, java_path, args);
     }

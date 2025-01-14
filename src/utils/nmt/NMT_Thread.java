@@ -113,13 +113,8 @@ public class NMT_Thread implements Statistical, Comparable<NMT_Thread>
 
     String name = Path.of(path, "hs_nmt_pid"+pid+"_threads_record.log").toString();
     LogFile log = new LogFile(name);
-    // for (int i = 0; i < 10; i++)
-    // {
-    // 	log.print(i);
-    // }
 
     int elements_count = (log.size() / NMT_Thread.size());
-    //System.out.println("number of recorded threads: "+elements_count+" (plus the main thread)");
 
     if (elements_count > 0)
     {
