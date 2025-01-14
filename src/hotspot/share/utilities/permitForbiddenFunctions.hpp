@@ -77,11 +77,11 @@ inline char *strtok(char *str, const char *sep) { return ::strtok(str, sep); }
 inline long strtol(const char *str, char **endptr, int base) { return ::strtol(str, endptr, base); }
 
 #if defined(LINUX)
-  actual = permit_forbidden_function::malloc_usable_size(ptr);
+inline size_t malloc_usable_size(void *_Nullable ptr) { return ::malloc_usable_size(ptr); }
 #elif defined(WINDOWS)
-  actual = permit_forbidden_function::_msize(ptr);
+inline size_t _msize(void *memblock) { return ::_msize(memblock); }
 #elif defined(__APPLE__)
-  inline size_t malloc_size(const void *ptr) { return ::malloc_size(ptr); }
+inline size_t malloc_size(const void *ptr) { return ::malloc_size(ptr); }
 #endif
 
 END_ALLOW_FORBIDDEN_FUNCTIONS
