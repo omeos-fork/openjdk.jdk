@@ -471,7 +471,7 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
       _write_and_check(benchmark_fd, &type, sizeof(type));
       //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
     }
-    fprintf(stderr, "total:%ld [count:%ld]\n", total, count);
+    fprintf(stderr, "time:%ld[ns] [samples:%ld]\n", total, count);
 
     _close_and_check(log_fi.fd);
     _close_and_check(records_fi.fd);
@@ -734,7 +734,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
         total += duration;
       }
     }
-    fprintf(stderr, "loops:%d samples:%ld total:%ld\n", NMTBenchmarkRecordedLoops, count, total);
+    fprintf(stderr, "time:%ld[ns] [samples:%ld] [loops:ld]\n", total, count, NMTBenchmarkRecordedLoops);
 
 //    if (count > 0) {
 //      nullStream bench_null;
