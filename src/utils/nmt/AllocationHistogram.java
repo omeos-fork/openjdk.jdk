@@ -86,7 +86,7 @@ public class AllocationHistogram
                     HistogramValue v = this.map_requested.get(requested);
                     if (v == null)
                     {
-                        this.map_requested.put(requested, new HistogramValue(requested, actual)); 
+                        this.map_requested.put(requested, new HistogramValue(requested, actual));
                     }
                     else
                     {
@@ -96,7 +96,7 @@ public class AllocationHistogram
                     v = this.map_actual.get(actual);
                     if (v == null)
                     {
-                        this.map_actual.put(actual, new HistogramValue(requested, actual)); 
+                        this.map_actual.put(actual, new HistogramValue(requested, actual));
                     }
                     else
                     {
@@ -202,12 +202,10 @@ public class AllocationHistogram
         {
             if (memoryTypeActual)
             {
-                System.out.printf(String.format("%3s %11s %11s %7s %10s %9s [ratio == overhead / total overhead]\n",
-                            "#", " ", "actual:", "count:", "overhead:", "<ratio:>"));				}
+                System.out.printf(String.format("%3s %11s %11s %7s %10s %9s [ratio == overhead / total overhead]\n", "#", " ", "actual:", "count:", "overhead:", "<ratio:>"));				}
             else
             {
-                System.out.printf(String.format("%3s %11s %11s %7s %10s %9s [ratio == overhead / total overhead]\n",
-                            "#", "requested:", "actual:", "count:", "overhead:", "<ratio:>"));				}
+                System.out.printf(String.format("%3s %11s %11s %7s %10s %9s [ratio == overhead / total overhead]\n", "#", "requested:", "actual:", "count:", "overhead:", "<ratio:>"));				}
         }
     }
 
@@ -344,8 +342,7 @@ public class AllocationHistogram
         int index = 1;
         for (Long s : sizes)
         {
-            System.out.printf(String.format("index:%3d key:%,9d value: %12s\n", 
-                                            index, s, this.map_requested.get(s)));
+            System.out.printf(String.format("index:%3d key:%,9d value: %12s\n", index, s, this.map_requested.get(s)));
             index++;
         }			
         System.out.printf("\n");
@@ -357,14 +354,12 @@ public class AllocationHistogram
         if (useActual)
         {
             map = this.map_actual;
-            System.out.printf(String.format(" max_count_actual:%,d length:%,d total overhead:%,d\n", 
-                                            this.max_count_actual, map.size(), this.total_overhead));
+            System.out.printf(String.format(" max_count_actual:%,d length:%,d total overhead:%,d\n", this.max_count_actual, map.size(), this.total_overhead));
         }
         else
         {
             map = this.map_requested;
-            System.out.printf(String.format(" max_count_requested:%,d length:%,d total overhead:%,d\n", 
-                                            this.max_count_requested, map.size(), this.total_overhead));
+            System.out.printf(String.format(" max_count_requested:%,d length:%,d total overhead:%,d\n", this.max_count_requested, map.size(), this.total_overhead));
         }
     }
 
