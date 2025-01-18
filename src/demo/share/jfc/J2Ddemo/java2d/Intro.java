@@ -443,7 +443,7 @@ public class Intro extends JPanel {
             }
 
             while (thread == me) {
-              Scene scene = director.get(index);
+                Scene scene = director.get(index);
                 if (((Boolean) scene.participate).booleanValue()) {
                     repaint();
                     try {
