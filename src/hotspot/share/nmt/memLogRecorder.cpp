@@ -24,7 +24,7 @@
 
 // record pattern of allocations of memory calls:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NMTRecordMemoryAllocations=0x7FFFFFFF -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
+// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTRecordMemoryAllocations=0x7FFFFFFF -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
 //
 // OR record pattern of allocations of virtual memory calls:
 //
@@ -40,7 +40,7 @@
 //
 // then to actually run the benchmark:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NMTBenchmarkRecordedPID=43100 -XX:NMTBenchmarkRecordedLoops=10
+// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=43100 -XX:NMTBenchmarkRecordedLoops=10
 
 #include "precompiled.hpp"
 #include "jvm.h"
@@ -80,8 +80,12 @@ void NMT_LogRecorder::initialize(intx memoryCount, intx virtualMemoryCount) {
 }
 
 void NMT_LogRecorder::finish() {
-  NMT_MemoryLogRecorder::instance()->finish();
-  NMT_VirtualMemoryLogRecorder::instance()->finish();
+  if (!NMT_MemoryLogRecorder::instance()->done()) {
+    NMT_MemoryLogRecorder::instance()->finish();
+  }
+  if (!NMT_VirtualMemoryLogRecorder::instance()->done()) {
+    NMT_VirtualMemoryLogRecorder::instance()->finish();
+  }
 }
 
 void NMT_LogRecorder::replay(const char* path, const int pid) {
@@ -495,8 +499,8 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
 void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack) {
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   //fprintf(stderr, "NMT_MemoryLogRecorder::log(%16s, %6ld, %12p, %12p)\n", NMTUtil::tag_to_name(mem_tag), requested, ptr, old);
-  volatile intx count = recorder->_count++;
   if (recorder->lockIfNotDone()) {
+    volatile intx count = recorder->_count++;
     if (count < recorder->_limit) {
       Entry entry;
       entry.time = count;
@@ -734,7 +738,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
         total += duration;
       }
     }
-    fprintf(stderr, "time:%ld[ns] [samples:%ld] [loops:ld]\n", total, count, NMTBenchmarkRecordedLoops);
+    fprintf(stderr, "time:%ld[ns] [samples:%ld] [loops:%ld]\n", total, count, NMTBenchmarkRecordedLoops);
 
 //    if (count > 0) {
 //      nullStream bench_null;
@@ -756,11 +760,11 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
 }
 
 void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {
-  fprintf(stderr, "NMT_VirtualMemoryLogRecorder::log (%s, %hhu, %hhu, %zu, %zu, %p, %p)\n",
-          type_to_name(type), mem_tag, mem_tag_split, size, size_split, ptr, stack);fflush(stderr);
+  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::log (%s, %hhu, %hhu, %zu, %zu, %p, %p)\n",
+  //        type_to_name(type), mem_tag, mem_tag_split, size, size_split, ptr, stack);fflush(stderr);
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
-  volatile intx count = recorder->_count++;
   if (recorder->lockIfNotDone()) {
+    volatile intx count = recorder->_count++;
     if (count < recorder->_limit) {
       Entry entry;
       entry.type = type;
