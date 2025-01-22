@@ -54,6 +54,7 @@ public:
   static void finish();
   static void replay(const char* path, const int pid);
   static void logThreadName(const char* name);
+  static size_t mallocSize(void* ptr);
 
 public:
   void init();
