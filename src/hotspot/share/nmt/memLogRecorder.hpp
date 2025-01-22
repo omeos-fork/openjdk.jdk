@@ -75,7 +75,7 @@ private:
   static NMT_MemoryLogRecorder _recorder;
 
 private:
-  struct Entry {
+    struct Entry {
     jlong time;
     intx thread;
     address ptr;
@@ -94,6 +94,7 @@ public:
   static bool initialized() {
     return false;
   }
+  static void print(Entry *e);
   static void finish(void);
   static void replay(const char* path, const int pid);
   static void log_free(void *ptr);

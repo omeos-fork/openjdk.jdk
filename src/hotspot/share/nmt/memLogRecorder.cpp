@@ -40,7 +40,7 @@
 //
 // then to actually run the benchmark:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=43100 -XX:NMTBenchmarkRecordedLoops=10
+// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=55996 -XX:NMTBenchmarkRecordedLoops=10
 
 #include "precompiled.hpp"
 #include "jvm.h"
@@ -49,6 +49,7 @@
 #include "nmt/mallocHeader.inline.hpp"
 #include "nmt/memLogRecorder.hpp"
 #include "nmt/memReporter.hpp"
+#include "nmt/memTracker.hpp"
 #include "nmt/memTracker.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/globals.hpp"
@@ -82,6 +83,11 @@ void NMT_LogRecorder::initialize(intx memoryCount, intx virtualMemoryCount) {
 
 void NMT_LogRecorder::finish() {
   if (!NMT_MemoryLogRecorder::instance()->done()) {
+    fprintf(stderr, ">>>>\n");
+    void *ptr1 = os::malloc(128, mtNone);
+    void *ptr2 = os::realloc(ptr1, 256, mtNone);
+    os::free(ptr2);
+    fprintf(stderr, "<<<<\n");
     NMT_MemoryLogRecorder::instance()->finish();
   }
   if (!NMT_VirtualMemoryLogRecorder::instance()->done()) {
@@ -169,7 +175,7 @@ size_t NMT_LogRecorder::mallocSize(void* ptr)
 #define IS_FREE(e)           ((e->requested == 0) && (e->old == nullptr))
 #define IS_REALLOC(e)        ((e->requested  > 0) && (e->old != nullptr))
 #define IS_MALLOC_REALLOC(e) ((e->requested  > 0) && (e->old == REALLOC_MARKER))
-#define IS_MALOC(e)          ((e->requested  > 0) && (e->old == nullptr))
+#define IS_MALLOC(e)         ((e->requested  > 0) && (e->old == nullptr))
 
 #define ALLOCS_LOG_FILE "hs_nmt_pid%p_allocs_record.log"
 #define THREADS_LOG_FILE "hs_nmt_pid%p_threads_record.log"
@@ -390,7 +396,7 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
       os::exit(-1);
     }
 
-    jlong total = 0;
+    jlong nanoseconds = 0;
     jlong requestedTotal = 0;
     jlong actualTotal = 0;
     fprintf(stderr, "benchmarking \"%s\"\n", benchmark_file_path);
@@ -409,50 +415,37 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
       }
       jlong requested = 0;
       jlong actual = 0;
-
       pointers[i] = nullptr;
       jlong start = 0;
       jlong end = 0;
       {
-        if (IS_MALOC(e) || (IS_MALLOC_REALLOC(e))) {
+        if (IS_MALLOC(e) || (IS_MALLOC_REALLOC(e))) {
           address client_ptr = nullptr;
           start = os::javaTimeNanos();
           {
             client_ptr = (address)os::malloc(e->requested, mem_tag, stack);
           }
           end = os::javaTimeNanos();
-          if (MemTracker::enabled()) {
-            actual += NMT_LogRecorder::mallocSize((address)MallocHeader::resolve_checked(client_ptr));
-          } else {
-            actual += NMT_LogRecorder::mallocSize(client_ptr);
-          }
-          requested += e->requested;
+          requested = e->requested;
+          actual = e->actual;
           pointers[i] = client_ptr;
         } else if (IS_REALLOC(e)) {
           // the recorded "realloc" was captured in a different process,
           // so find the corresponding "malloc" or "realloc" in this process
-          for (off_t j = i; j >= 0; j--) {
+          for (off_t j = i-1; j >= 0; j--) {
             Entry *p = &records_file_entries[j];
-            if ((e->ptr == p->ptr) && (pointers[j] != nullptr)) {
-              address client_ptr = pointers[j];
-              if (MemTracker::enabled()) {
-                actual -= NMT_LogRecorder::mallocSize((address)MallocHeader::resolve_checked(client_ptr));
-              } else {
-                actual -= NMT_LogRecorder::mallocSize(client_ptr);
-              }
+            if (e->old == p->ptr) {
+              address ptr = pointers[j];
               requested -= p->requested;
+              actual -= p->actual;
               start = os::javaTimeNanos();
               {
-                client_ptr = (address)os::realloc(client_ptr, e->requested, mem_tag, stack);
+                ptr = (address)os::realloc(ptr, e->requested, mem_tag, stack);
               }
               end = os::javaTimeNanos();
-              if (MemTracker::enabled()) {
-                actual += NMT_LogRecorder::mallocSize((address)MallocHeader::resolve_checked(client_ptr));
-              } else {
-                actual += NMT_LogRecorder::mallocSize(client_ptr);
-              }
               requested += e->requested;
-              pointers[i] = client_ptr;
+              actual += e->actual;
+              pointers[i] = ptr;
               pointers[j] = nullptr;
               break;
             }
@@ -460,19 +453,15 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
         } else if (IS_FREE(e)) {
           // the recorded "free" was captured in a different process,
           // so find the corresponding "malloc" or "realloc" in this process
-          for (off_t j = i; j >= 0; j--) {
+          for (off_t j = i-1; j >= 0; j--) {
             Entry *p = &records_file_entries[j];
-            if ((e->ptr == p->ptr) && (pointers[j] != nullptr)) {
-              void* client_ptr = pointers[j];
-              if (MemTracker::enabled()) {
-                actual -= NMT_LogRecorder::mallocSize((address)MallocHeader::resolve_checked(client_ptr));
-              } else {
-                actual -= NMT_LogRecorder::mallocSize(client_ptr);
-              }
+            if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
+              void* ptr = pointers[j];
               requested -= p->requested;
+              actual -= p->actual;
               start = os::javaTimeNanos();
               {
-                os::free(client_ptr);
+                os::free(ptr);
               }
               end = os::javaTimeNanos();
               pointers[i] = nullptr;
@@ -484,23 +473,23 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
           fprintf(stderr, "HUH?\n");
           os::exit(-1);
         }
-
         requestedTotal += requested;
         actualTotal += actual;
+        //fprintf(stderr, "requested:%ld, actual:%ld\n", requested, actual);
       }
       jlong duration = (start > 0) ? (end - start) : 0;
-      total += duration;
+      nanoseconds += duration;
 
       _write_and_check(benchmark_fd, &duration, sizeof(duration));
       _write_and_check(benchmark_fd, &requested, sizeof(requested));
       _write_and_check(benchmark_fd, &actual, sizeof(actual));
-      char type = (IS_MALOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
+      char type = (IS_MALLOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
       _write_and_check(benchmark_fd, &type, sizeof(type));
       //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
     }
     jlong overhead = actualTotal - requestedTotal;
     double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
-    fprintf(stderr, "time:%ld[ns] [samples:%ld] memory overhead=%'zu bytes [%.2f%%] [requestedTotal=%'zu actualTotal=%'zu]\n", total, count, overhead, overheadPercentage, requestedTotal, actualTotal);
+    fprintf(stderr, "time:%'ld[ns] [samples:%'ld] memory overhead=%'zu bytes [%.2f%%] [requestedTotal=%'zu actualTotal=%'zu]\n", nanoseconds, count, overhead, overheadPercentage, requestedTotal, actualTotal);
 
     _close_and_check(log_fi.fd);
     _close_and_check(records_fi.fd);
@@ -540,13 +529,7 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       entry.actual = 0;
       if (entry.requested > 0)
       {
-#if defined(LINUX)
-        entry.actual = permit_forbidden_function::malloc_usable_size(ptr);
-#elif defined(WINDOWS)
-        entry.actual = permit_forbidden_function::_msize(ptr);
-#elif defined(__APPLE__)
-        entry.actual = permit_forbidden_function::malloc_size(ptr);
-#endif
+        entry.actual = NMT_LogRecorder::mallocSize(ptr);
       }
 
       entry.mem_tag = (jlong)mem_tag;
@@ -599,13 +582,7 @@ fprintf(stderr, "NMT_MemoryLogRecorder::printActualSizesFor(%s)\n", list);
       long actual = 0;
       void *ptr = permit_forbidden_function::malloc(requested);
       if (ptr != nullptr) {
-#if defined(LINUX)
-        actual = permit_forbidden_function::malloc_usable_size(ptr);
-#elif defined(WINDOWS)
-        actual = permit_forbidden_function::_msize(ptr);
-#elif defined(__APPLE__)
-        actual = permit_forbidden_function::malloc_size(ptr);
-#endif
+        actual = NMT_LogRecorder::mallocSize(ptr);
         permit_forbidden_function::free(ptr);
       }
       printf("%ld", actual);
@@ -615,6 +592,22 @@ fprintf(stderr, "NMT_MemoryLogRecorder::printActualSizesFor(%s)\n", list);
       }
     }
     os::exit(0);
+  }
+}
+void NMT_MemoryLogRecorder::print(Entry *e) {
+  if (e == nullptr) {
+    fprintf(stderr, "nullptr\n");
+  } else {
+    if (IS_FREE(e)) {
+      fprintf(stderr, "           FREE: ");
+    } else if (IS_REALLOC(e)) {
+      fprintf(stderr, "        REALLOC: ");
+    } else if (IS_MALLOC_REALLOC(e)) {
+      fprintf(stderr, "MALLOC/RERALLOC: ");
+    } else if (IS_MALLOC(e)) {
+      fprintf(stderr, "         MALLOC: ");
+    }
+    fprintf(stderr, "time:%15ld, thread:%6ld, ptr:%14p, old:%14p, requested:%8ld, actual:%8ld, mem_tag:%s\n", e->time, e->thread, e->ptr, e->old, e->requested, e->actual, NMTUtil::tag_to_name(NMTUtil::index_to_tag((int)e->mem_tag)));
   }
 }
 
@@ -701,7 +694,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
       //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
       for (off_t i = 0; i < count; i++) {
         Entry *e = &records_file_entries[i];
-
+        
         MemTag mem_tag = mtNone; //NMTUtil::index_to_tag((int)e->mem_tag);
         int frameCount;
         for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
