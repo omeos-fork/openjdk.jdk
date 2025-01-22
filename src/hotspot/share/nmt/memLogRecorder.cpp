@@ -83,11 +83,6 @@ void NMT_LogRecorder::initialize(intx memoryCount, intx virtualMemoryCount) {
 
 void NMT_LogRecorder::finish() {
   if (!NMT_MemoryLogRecorder::instance()->done()) {
-    fprintf(stderr, ">>>>\n");
-    void *ptr1 = os::malloc(128, mtNone);
-    void *ptr2 = os::realloc(ptr1, 256, mtNone);
-    os::free(ptr2);
-    fprintf(stderr, "<<<<\n");
     NMT_MemoryLogRecorder::instance()->finish();
   }
   if (!NMT_VirtualMemoryLogRecorder::instance()->done()) {
