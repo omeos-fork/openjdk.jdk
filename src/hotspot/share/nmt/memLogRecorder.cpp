@@ -390,11 +390,12 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
       tty->print("Can't open [%s].", benchmark_file_path);
       os::exit(-1);
     }
-
+    jlong requestedByCategory[mt_number_of_tags] = {0};
+    jlong allocatedByCategory[mt_number_of_tags] = {0};
+    jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
     jlong nanoseconds = 0;
     jlong requestedTotal = 0;
     jlong actualTotal = 0;
-    fprintf(stderr, "benchmarking \"%s\"\n", benchmark_file_path);
     for (off_t i = 0; i < count; i++) {
       Entry *e = &records_file_entries[i];
       MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
@@ -471,6 +472,12 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
         requestedTotal += requested;
         actualTotal += actual;
         //fprintf(stderr, "requested:%ld, actual:%ld\n", requested, actual);
+
+        if (!IS_FREE(e)) {
+          requestedByCategory[e->mem_tag] += requested;
+          allocatedByCategory[e->mem_tag] += actual;
+          nmtObjectsByCategory[e->mem_tag]++;
+        }
       }
       jlong duration = (start > 0) ? (end - start) : 0;
       nanoseconds += duration;
@@ -484,8 +491,16 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
     }
     jlong overhead = actualTotal - requestedTotal;
     double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
-    fprintf(stderr, "time:%'ld[ns] [samples:%'ld] memory overhead=%'zu bytes [%.2f%%] [requestedTotal=%'zu actualTotal=%'zu]\n", nanoseconds, count, overhead, overheadPercentage, requestedTotal, actualTotal);
-
+    fprintf(stderr, "\n\n\nSummary:\n\n");
+    fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
+    fprintf(stderr, "memory overhead=%'zu bytes [%.2f%%]\n", overhead, overheadPercentage);
+    fprintf(stderr, "requestedTotal=%'zu actualTotal=%'zu\n", requestedTotal, actualTotal);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "%22s: %12s: %12s\n", "NMT category", "allocations", "bytes");
+    fprintf(stderr, "--------------------------------------------------\n");
+    for (int i = 0; i < mt_number_of_tags; i++) {
+      fprintf(stderr, "%22s: %'12ld: %'12ld\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i]);
+    }
     _close_and_check(log_fi.fd);
     _close_and_check(records_fi.fd);
     _close_and_check(benchmark_fd);
