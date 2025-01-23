@@ -479,7 +479,11 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
 
         requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
         allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
-        nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
+        if (IS_FREE(e)) {
+          nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
+        } else {
+          nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
+        }
       }
       jlong duration = (start > 0) ? (end - start) : 0;
       nanoseconds += duration;
@@ -498,7 +502,7 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
     fprintf(stderr, "memory overhead=%'zu bytes [%.2f%%]\n", overhead, overheadPercentage);
     fprintf(stderr, "requestedTotal=%'zu actualTotal=%'zu\n", requestedTotal, actualTotal);
     fprintf(stderr, "\n");
-    fprintf(stderr, "%22s: %12s: %12s\n", "NMT category", "allocations", "bytes");
+    fprintf(stderr, "%22s: %12s: %12s\n", "NMT category", "objects", "bytes");
     fprintf(stderr, "--------------------------------------------------\n");
     for (int i = 0; i < mt_number_of_tags; i++) {
       fprintf(stderr, "%22s: %'12ld: %'12ld\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i]);
