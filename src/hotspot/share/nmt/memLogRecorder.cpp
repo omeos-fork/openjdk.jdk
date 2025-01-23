@@ -419,6 +419,9 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
           requested = e->requested;
           actual = e->actual;
           pointers[i] = client_ptr;
+          if (mem_tag == mtNone) {
+            fprintf(stderr, "MALLOC?\n");
+          }
         } else if (IS_REALLOC(e)) {
           // the recorded "realloc" was captured in a different process,
           // so find the corresponding "malloc" or "realloc" in this process
@@ -439,6 +442,9 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
               pointers[j] = nullptr;
               break;
             }
+            if (mem_tag == mtNone) {
+              fprintf(stderr, "REALLOC?\n");
+            }
           }
         } else if (IS_FREE(e)) {
           // the recorded "free" was captured in a different process,
@@ -446,6 +452,7 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
           for (off_t j = i-1; j >= 0; j--) {
             Entry *p = &records_file_entries[j];
             if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
+              mem_tag = NMTUtil::index_to_tag((int)p->mem_tag);
               void* ptr = pointers[j];
               requested -= p->requested;
               actual -= p->actual;
@@ -459,6 +466,9 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
               break;
             }
           }
+          if (mem_tag == mtNone) {
+            fprintf(stderr, "FREE?\n");
+          }
         } else {
           fprintf(stderr, "HUH?\n");
           os::exit(-1);
@@ -467,11 +477,9 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
         actualTotal += actual;
         //fprintf(stderr, "requested:%ld, actual:%ld\n", requested, actual);
 
-        if (!IS_FREE(e)) {
-          requestedByCategory[e->mem_tag] += requested;
-          allocatedByCategory[e->mem_tag] += actual;
-          nmtObjectsByCategory[e->mem_tag]++;
-        }
+        requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
+        allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
+        nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
       }
       jlong duration = (start > 0) ? (end - start) : 0;
       nanoseconds += duration;
