@@ -600,10 +600,6 @@ const int ObjectAlignmentInBytes = 8;
           "Benchmark memory allocations specified number of times")         \
           range(0, max_jint)                                                \
                                                                             \
-  product(ccstrlist, NMTPrintMemoryAllocationsSizesFor, nullptr, DIAGNOSTIC,\
-          "Print the actual allocated memory sizes for given "              \
-          "comma separated list of malloc sizes")                           \
-                                                                            \
   product(bool, LogCompilation, false, DIAGNOSTIC,                          \
           "Log compilation activity in detail to LogFile")                  \
                                                                             \

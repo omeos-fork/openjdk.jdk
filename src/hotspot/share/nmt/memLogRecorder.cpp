@@ -288,12 +288,6 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
 
 void NMT_MemoryLogRecorder::initialize(intx limit) {
   fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld)\n", limit);
-  if ((NMTPrintMemoryAllocationsSizesFor != nullptr) && (strlen(NMTPrintMemoryAllocationsSizesFor) > 0)) {
-    NMT_MemoryLogRecorder::printActualSizesFor((const char*)NMTPrintMemoryAllocationsSizesFor);
-    os::exit(0);
-    fprintf(stderr, ">> NMTPrintMemoryAllocationsSizesFor:%s\n", NMTPrintMemoryAllocationsSizesFor);
-    fprintf(stderr, ">> os::exit()\n");
-  }
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -582,28 +576,6 @@ void NMT_MemoryLogRecorder::log_realloc(MemTag mem_tag, size_t requested, void* 
   NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, (address)old, stack);
 }
 
-void NMT_MemoryLogRecorder::printActualSizesFor(const char* list) {
-fprintf(stderr, "NMT_MemoryLogRecorder::printActualSizesFor(%s)\n", list);
-  char* string = os::strdup(NMTPrintMemoryAllocationsSizesFor, mtNMT);
-  if (string != nullptr) {
-    char* token = permit_forbidden_function::strtok(string, ",");
-    while (token) {
-      long requested =  permit_forbidden_function::strtol(token, nullptr, 10);
-      long actual = 0;
-      void *ptr = permit_forbidden_function::malloc(requested);
-      if (ptr != nullptr) {
-        actual = NMT_LogRecorder::mallocSize(ptr);
-        permit_forbidden_function::free(ptr);
-      }
-      printf("%ld", actual);
-        token = permit_forbidden_function::strtok(NULL, ",");
-      if (token) {
-        printf(",");
-      }
-    }
-    os::exit(0);
-  }
-}
 void NMT_MemoryLogRecorder::print(Entry *e) {
   if (e == nullptr) {
     fprintf(stderr, "nullptr\n");

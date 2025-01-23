@@ -73,9 +73,6 @@ inline void* realloc(void* ptr, size_t size) { return ::realloc(ptr, size); }
 
 inline char* strdup(const char* s) { return ::strdup(s); }
 
-inline char *strtok(char *str, const char *sep) { return ::strtok(str, sep); }
-inline long strtol(const char *str, char **endptr, int base) { return ::strtol(str, endptr, base); }
-
 #if defined(LINUX)
 inline size_t malloc_usable_size(void *_Nullable ptr) { return ::malloc_usable_size(ptr); }
 #elif defined(WINDOWS)
