@@ -499,13 +499,17 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
     double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
     fprintf(stderr, "\n\n\nSummary:\n\n");
     fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
-    fprintf(stderr, "memory overhead=%'zu bytes [%.2f%%]\n", overhead, overheadPercentage);
+    fprintf(stderr, "memory overhead=%'zu bytes [%2.2f%%]\n", overhead, overheadPercentage);
     fprintf(stderr, "requestedTotal=%'zu actualTotal=%'zu\n", requestedTotal, actualTotal);
     fprintf(stderr, "\n");
-    fprintf(stderr, "%22s: %12s: %12s\n", "NMT category", "objects", "bytes");
-    fprintf(stderr, "--------------------------------------------------\n");
+    fprintf(stderr, "%22s: %12s: %12s: %12s:\n", "NMT category", "objects", "bytes", "overhead");
+    fprintf(stderr, "-----------------------------------------------------------------\n");
     for (int i = 0; i < mt_number_of_tags; i++) {
-      fprintf(stderr, "%22s: %'12ld: %'12ld\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i]);
+      double overhead = 0.0;
+      if (requestedByCategory[i] > 0) {
+        overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
+      }
+      fprintf(stderr, "%22s: %'12ld %'12ld         [%.2f%%]\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], overhead);
     }
     _close_and_check(log_fi.fd);
     _close_and_check(records_fi.fd);
