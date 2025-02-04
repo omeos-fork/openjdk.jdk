@@ -40,7 +40,7 @@
 //
 // then to actually run the benchmark:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=55996 -XX:NMTBenchmarkRecordedLoops=10
+// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=55996
 
 #include "precompiled.hpp"
 #include "jvm.h"
@@ -287,7 +287,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
 }
 
 void NMT_MemoryLogRecorder::initialize(intx limit) {
-  fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld)\n", limit);
+  //fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld)\n", limit);
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -339,7 +339,7 @@ void NMT_MemoryLogRecorder::finish(void) {
 }
 
 void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
-  fprintf(stderr, "> NMT_MemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
+  //fprintf(stderr, "NMT_MemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
   if ((pid != 0) && ((path == nullptr) || (strlen(path) == 0))) {
     static const char *home = ".";
     path = home;
@@ -475,7 +475,6 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
         }
         requestedTotal += requested;
         actualTotal += actual;
-        //fprintf(stderr, "requested:%ld, actual:%ld\n", requested, actual);
 
         requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
         allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
@@ -623,7 +622,7 @@ static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) 
 }
 
 void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
-  fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld)\n", limit);
+  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::initialize(%ld)\n", limit);
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -666,7 +665,7 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
 }
 
 void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
-    fprintf(stderr, "NMT_VirtualMemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
+    //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
   if ((pid != 0) && ((path == nullptr) || (strlen(path) == 0))) {
     static const char *home = ".";
     path = home;
@@ -688,73 +687,71 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
     long int count = (records_fi.size / sizeof(Entry));
 
     jlong total = 0;
-    for (off_t l = 0; l < NMTBenchmarkRecordedLoops; l++) {
-      //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
-      for (off_t i = 0; i < count; i++) {
-        Entry *e = &records_file_entries[i];
-        
-        MemTag mem_tag = mtNone; //NMTUtil::index_to_tag((int)e->mem_tag);
-        int frameCount;
-        for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
-          if (e->stack[frameCount] == 0) {
-            break;
-          }
-        }
-        NativeCallStack stack = NativeCallStack::empty_stack();
-        if (frameCount > 0) {
-          stack = NativeCallStack(e->stack, frameCount);
-        }
+    //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
+    for (off_t i = 0; i < count; i++) {
+      Entry *e = &records_file_entries[i];
 
-        jlong start = os::javaTimeNanos();
-        {
-          switch (e->type) {
-            case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
-              //fprintf(stderr, "[record_virtual_memory_reserve(%p, %zu, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
-              MemTracker::record_virtual_memory_reserve(e->ptr, e->size, stack, mem_tag);
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::RELEASE:
-              //fprintf(stderr, "[record_virtual_memory_release(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
-              MemTracker::record_virtual_memory_release(e->ptr, e->size);
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT:
-              //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
-              MemTracker::record_virtual_memory_uncommit(e->ptr, e->size);
-              //fprintf(stderr, ">\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT:
-              //fprintf(stderr, "[MemTracker::record_virtual_memory_reserve_and_commit\n");
-              MemTracker::record_virtual_memory_reserve_and_commit(e->ptr, e->size, stack, mem_tag);
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::COMMIT:
-              //fprintf(stderr, "[record_virtual_memory_commit(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
-              MemTracker::record_virtual_memory_commit(e->ptr, e->size, stack);
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED:
-              //fprintf(stderr, "[MemTracker::record_virtual_memory_split_reserved\n");
-              MemTracker::record_virtual_memory_split_reserved(e->ptr, e->size, e->size_split, mem_tag, NMTUtil::index_to_tag((int)e->mem_tag_split));
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            case NMT_VirtualMemoryLogRecorder::Type::TAG:
-              //fprintf(stderr, "[record_virtual_memory_type(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
-              MemTracker::record_virtual_memory_tag(e->ptr, mem_tag);
-              //fprintf(stderr, "]\n");fflush(stderr);
-              break;
-            default:
-              fprintf(stderr, "HUH?\n");
-              os::exit(-1);
-              break;
-          }
+      MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
+      int frameCount;
+      for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
+        if (e->stack[frameCount] == 0) {
+          break;
         }
-        jlong end = os::javaTimeNanos();
-        jlong duration = (start > 0) ? (end - start) : 0;
-        total += duration;
       }
+      NativeCallStack stack = NativeCallStack::empty_stack();
+      if (frameCount > 0) {
+        stack = NativeCallStack(e->stack, frameCount);
+      }
+
+      jlong start = os::javaTimeNanos();
+      {
+        switch (e->type) {
+          case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
+            //fprintf(stderr, "[record_virtual_memory_reserve(%p, %zu, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
+            MemTracker::record_virtual_memory_reserve(e->ptr, e->size, stack, mem_tag);
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::RELEASE:
+            //fprintf(stderr, "[record_virtual_memory_release(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+            MemTracker::record_virtual_memory_release(e->ptr, e->size);
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT:
+            //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+            MemTracker::record_virtual_memory_uncommit(e->ptr, e->size);
+            //fprintf(stderr, ">\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT:
+            //fprintf(stderr, "[MemTracker::record_virtual_memory_reserve_and_commit\n");
+            MemTracker::record_virtual_memory_reserve_and_commit(e->ptr, e->size, stack, mem_tag);
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::COMMIT:
+            //fprintf(stderr, "[record_virtual_memory_commit(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+            MemTracker::record_virtual_memory_commit(e->ptr, e->size, stack);
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED:
+            //fprintf(stderr, "[MemTracker::record_virtual_memory_split_reserved\n");
+            MemTracker::record_virtual_memory_split_reserved(e->ptr, e->size, e->size_split, mem_tag, NMTUtil::index_to_tag((int)e->mem_tag_split));
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          case NMT_VirtualMemoryLogRecorder::Type::TAG:
+            //fprintf(stderr, "[record_virtual_memory_type(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+            MemTracker::record_virtual_memory_tag(e->ptr, mem_tag);
+            //fprintf(stderr, "]\n");fflush(stderr);
+            break;
+          default:
+            fprintf(stderr, "HUH?\n");
+            os::exit(-1);
+            break;
+        }
+      }
+      jlong end = os::javaTimeNanos();
+      jlong duration = (start > 0) ? (end - start) : 0;
+      total += duration;
     }
-    fprintf(stderr, "time:%ld[ns] [samples:%ld] [loops:%ld]\n", total, count, NMTBenchmarkRecordedLoops);
+    fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
 
 //    if (count > 0) {
 //      nullStream bench_null;
@@ -766,7 +763,6 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
 //        jlong duration = (start > 0) ? (end - start) : 0;
 //        total += duration;
 //      }
-//      fprintf(stderr, "loops:%d total:%ld\n", NMTBenchmarkRecordedLoops, total);
 //    }
 
     _close_and_check(records_fi.fd);

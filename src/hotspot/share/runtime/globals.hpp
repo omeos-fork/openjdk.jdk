@@ -596,10 +596,6 @@ const int ObjectAlignmentInBytes = 8;
           "Benchmark memory allocations using results recorderd with PID")  \
           range(0, max_jint)                                                \
                                                                             \
-  product(int, NMTBenchmarkRecordedLoops, 1, DIAGNOSTIC,                    \
-          "Benchmark memory allocations specified number of times")         \
-          range(0, max_jint)                                                \
-                                                                            \
   product(bool, LogCompilation, false, DIAGNOSTIC,                          \
           "Log compilation activity in detail to LogFile")                  \
                                                                             \
