@@ -166,10 +166,8 @@ size_t NMT_LogRecorder::mallocSize(void* ptr)
 #endif
 }
 
-#define REALLOC_MARKER       ((void *)1)
 #define IS_FREE(e)           ((e->requested == 0) && (e->old == nullptr))
 #define IS_REALLOC(e)        ((e->requested  > 0) && (e->old != nullptr))
-#define IS_MALLOC_REALLOC(e) ((e->requested  > 0) && (e->old == REALLOC_MARKER))
 #define IS_MALLOC(e)         ((e->requested  > 0) && (e->old == nullptr))
 
 #define ALLOCS_LOG_FILE "hs_nmt_pid%p_allocs_record.log"
@@ -405,7 +403,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     jlong start = 0;
     jlong end = 0;
     {
-      if (IS_MALLOC(e) || (IS_MALLOC_REALLOC(e))) {
+      if (IS_MALLOC(e)) {
         address client_ptr = nullptr;
         start = os::javaTimeNanos();
         {
@@ -575,10 +573,6 @@ void NMT_MemoryLogRecorder::log_free(void *ptr) {
 }
 
 void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old) {
-  if (old == nullptr) {
-    // mark the realloc's old pointer, so that we can tell realloc(NULL) and malloc() apart
-    old = REALLOC_MARKER;
-  }
   NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, (address)old, stack);
 }
 
@@ -590,8 +584,6 @@ void NMT_MemoryLogRecorder::print(Entry *e) {
       fprintf(stderr, "           FREE: ");
     } else if (IS_REALLOC(e)) {
       fprintf(stderr, "        REALLOC: ");
-    } else if (IS_MALLOC_REALLOC(e)) {
-      fprintf(stderr, "MALLOC/RERALLOC: ");
     } else if (IS_MALLOC(e)) {
       fprintf(stderr, "         MALLOC: ");
     }
@@ -823,4 +815,3 @@ void NMT_VirtualMemoryLogRecorder::log_virtual_memory_split_reserved(void* addr,
 void NMT_VirtualMemoryLogRecorder::log_virtual_memory_tag(void* addr, MemTag mem_tag) {
   NMT_VirtualMemoryLogRecorder::_log(Type::TAG, mem_tag, mtNone, 0, 0, (address)addr, nullptr);
 }
-
