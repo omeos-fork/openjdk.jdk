@@ -90,9 +90,9 @@ void NMT_LogRecorder::finish() {
   }
 }
 
-void NMT_LogRecorder::replay(const char* path, const int pid) {
-  NMT_MemoryLogRecorder::instance()->replay(path, pid);
-  NMT_VirtualMemoryLogRecorder::instance()->replay(path, pid);
+void NMT_LogRecorder::replay(const int pid) {
+  NMT_MemoryLogRecorder::instance()->replay(pid);
+  NMT_VirtualMemoryLogRecorder::instance()->replay(pid);
 }
 
 void NMT_LogRecorder::init() {
@@ -338,197 +338,192 @@ void NMT_MemoryLogRecorder::finish(void) {
   }
 }
 
-void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
+void NMT_MemoryLogRecorder::replay(const int pid) {
   //fprintf(stderr, "NMT_MemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
-  if ((pid != 0) && ((path == nullptr) || (strlen(path) == 0))) {
-    static const char *home = ".";
-    path = home;
+  static const char *path = ".";
+  setlocale(LC_NUMERIC, "");
+  NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
+  recorder->lock();
+
+  // compare the recorded and current levels of NMT and exit if different
+  file_info log_fi = _open_file_and_read(INFO_LOG_FILE, path, pid);
+  if (log_fi.fd == -1) {
+    return;
   }
-  if ((path != nullptr) && (strlen(path) > 0)) {
-    setlocale(LC_NUMERIC, "");
-    NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
-    recorder->lock();
+  size_t* status_file_bytes = (size_t*)log_fi.ptr;
+  NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
+  if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
+    tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
+    tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
+    os::exit(-1);
+  }
 
-    // compare the recorded and current levels of NMT and exit if different
-    file_info log_fi = _open_file_and_read(INFO_LOG_FILE, path, pid);
-    if (log_fi.fd == -1) {
-      return;
-    }
-    size_t* status_file_bytes = (size_t*)log_fi.ptr;
-    NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
-    if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
-      tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
-      tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-      os::exit(-1);
-    }
+  // open records file for reading the memory allocations to "play back"
+  file_info records_fi = _open_file_and_read(ALLOCS_LOG_FILE, path, pid);
+  if (records_fi.fd == -1) {
+    return;
+  }
+  Entry* records_file_entries = (Entry*)records_fi.ptr;
+  long int count = (records_fi.size / sizeof(Entry));
+  size_t size_pointers = count * sizeof(address);
+  address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
+  assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
 
-    // open records file for reading the memory allocations to "play back"
-    file_info records_fi = _open_file_and_read(ALLOCS_LOG_FILE, path, pid);
-    if (records_fi.fd == -1) {
-      return;
+  // open benchmark file for writing the final results
+  char *benchmark_file_path = NEW_C_HEAP_ARRAY(char, JVM_MAXPATHLEN, mtNMT);
+  if (!_create_file_path_with_pid(path, BENCHMARK_LOG_FILE, benchmark_file_path, pid)) {
+    tty->print("Can't construct benchmark_file_path [%s].", benchmark_file_path);
+    os::exit(-1);
+  }
+  int benchmark_fd = _prepare_log_file(benchmark_file_path, nullptr);
+  if (benchmark_fd == -1) {
+    tty->print("Can't open [%s].", benchmark_file_path);
+    os::exit(-1);
+  }
+  jlong requestedByCategory[mt_number_of_tags] = {0};
+  jlong allocatedByCategory[mt_number_of_tags] = {0};
+  jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
+  jlong nanoseconds = 0;
+  jlong requestedTotal = 0;
+  jlong actualTotal = 0;
+  for (off_t i = 0; i < count; i++) {
+    Entry *e = &records_file_entries[i];
+    MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
+    int frameCount;
+    for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
+      if (e->stack[frameCount] == 0) {
+        break;
+      }
     }
-    Entry* records_file_entries = (Entry*)records_fi.ptr;
-    long int count = (records_fi.size / sizeof(Entry));
-    size_t size_pointers = count * sizeof(address);
-    address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
-    assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
-
-    // open benchmark file for writing the final results
-    char *benchmark_file_path = NEW_C_HEAP_ARRAY(char, JVM_MAXPATHLEN, mtNMT);
-    if (!_create_file_path_with_pid(path, BENCHMARK_LOG_FILE, benchmark_file_path, pid)) {
-      tty->print("Can't construct benchmark_file_path [%s].", benchmark_file_path);
-      os::exit(-1);
+    NativeCallStack stack = NativeCallStack::empty_stack();
+    if (frameCount > 0) {
+      stack = NativeCallStack(e->stack, frameCount);
     }
-    int benchmark_fd = _prepare_log_file(benchmark_file_path, nullptr);
-    if (benchmark_fd == -1) {
-      tty->print("Can't open [%s].", benchmark_file_path);
-      os::exit(-1);
-    }
-    jlong requestedByCategory[mt_number_of_tags] = {0};
-    jlong allocatedByCategory[mt_number_of_tags] = {0};
-    jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
-    jlong nanoseconds = 0;
-    jlong requestedTotal = 0;
-    jlong actualTotal = 0;
-    for (off_t i = 0; i < count; i++) {
-      Entry *e = &records_file_entries[i];
-      MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
-      int frameCount;
-      for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
-        if (e->stack[frameCount] == 0) {
-          break;
+    jlong requested = 0;
+    jlong actual = 0;
+    pointers[i] = nullptr;
+    jlong start = 0;
+    jlong end = 0;
+    {
+      if (IS_MALLOC(e) || (IS_MALLOC_REALLOC(e))) {
+        address client_ptr = nullptr;
+        start = os::javaTimeNanos();
+        {
+          client_ptr = (address)os::malloc(e->requested, mem_tag, stack);
         }
+        end = os::javaTimeNanos();
+        requested = e->requested;
+        actual = e->actual;
+        pointers[i] = client_ptr;
+        if (mem_tag == mtNone) {
+          fprintf(stderr, "MALLOC?\n");
+        }
+      } else if (IS_REALLOC(e)) {
+        // the recorded "realloc" was captured in a different process,
+        // so find the corresponding "malloc" or "realloc" in this process
+        for (off_t j = i-1; j >= 0; j--) {
+          Entry *p = &records_file_entries[j];
+          if (e->old == p->ptr) {
+            address ptr = pointers[j];
+            requested -= p->requested;
+            actual -= p->actual;
+            start = os::javaTimeNanos();
+            {
+              ptr = (address)os::realloc(ptr, e->requested, mem_tag, stack);
+            }
+            end = os::javaTimeNanos();
+            requested += e->requested;
+            actual += e->actual;
+            pointers[i] = ptr;
+            pointers[j] = nullptr;
+            break;
+          }
+          if (mem_tag == mtNone) {
+            fprintf(stderr, "REALLOC?\n");
+          }
+        }
+      } else if (IS_FREE(e)) {
+        // the recorded "free" was captured in a different process,
+        // so find the corresponding "malloc" or "realloc" in this process
+        for (off_t j = i-1; j >= 0; j--) {
+          Entry *p = &records_file_entries[j];
+          if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
+            mem_tag = NMTUtil::index_to_tag((int)p->mem_tag);
+            void* ptr = pointers[j];
+            requested -= p->requested;
+            actual -= p->actual;
+            start = os::javaTimeNanos();
+            {
+              os::free(ptr);
+            }
+            end = os::javaTimeNanos();
+            pointers[i] = nullptr;
+            pointers[j] = nullptr;
+            break;
+          }
+        }
+        if (mem_tag == mtNone) {
+          fprintf(stderr, "FREE?\n");
+        }
+      } else {
+        fprintf(stderr, "HUH?\n");
+        os::exit(-1);
       }
-      NativeCallStack stack = NativeCallStack::empty_stack();
-      if (frameCount > 0) {
-        stack = NativeCallStack(e->stack, frameCount);
+      requestedTotal += requested;
+      actualTotal += actual;
+
+      requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
+      allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
+      if (IS_FREE(e)) {
+        nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
+      } else {
+        nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
       }
-      jlong requested = 0;
-      jlong actual = 0;
+    }
+    jlong duration = (start > 0) ? (end - start) : 0;
+    nanoseconds += duration;
+
+    _write_and_check(benchmark_fd, &duration, sizeof(duration));
+    _write_and_check(benchmark_fd, &requested, sizeof(requested));
+    _write_and_check(benchmark_fd, &actual, sizeof(actual));
+    char type = (IS_MALLOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
+    _write_and_check(benchmark_fd, &type, sizeof(type));
+    //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
+  }
+
+  jlong overhead = actualTotal - requestedTotal;
+  double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
+  size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
+  fprintf(stderr, "\n\n\nmalloc summary:\n\n");
+  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
+  fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes, overhead=%'zu bytes [%2.2f%%]\n", requestedTotal, actualTotal, overhead, overheadPercentage);
+  fprintf(stderr, "requested total=%'zu, actual total=%'zu, NMT headers=%'zu\n", requestedTotal, actualTotal, overhead_NMT);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "%22s: %12s: %12s: %12s:\n", "NMT category", "objects", "bytes", "overhead");
+  fprintf(stderr, "-----------------------------------------------------------------\n");
+  for (int i = 0; i < mt_number_of_tags; i++) {
+    double overhead = 0.0;
+    if (requestedByCategory[i] > 0) {
+      overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
+    }
+    fprintf(stderr, "%22s: %'12ld %'12ld         [%.2f%%]\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], overhead);
+  }
+  _close_and_check(log_fi.fd);
+  _close_and_check(records_fi.fd);
+  _close_and_check(benchmark_fd);
+  FREE_C_HEAP_ARRAY(char, benchmark_file_path);
+
+  for (off_t i = 0; i < count; i++) {
+    if (pointers[i] != nullptr) {
+      os::free(pointers[i]);
       pointers[i] = nullptr;
-      jlong start = 0;
-      jlong end = 0;
-      {
-        if (IS_MALLOC(e) || (IS_MALLOC_REALLOC(e))) {
-          address client_ptr = nullptr;
-          start = os::javaTimeNanos();
-          {
-            client_ptr = (address)os::malloc(e->requested, mem_tag, stack);
-          }
-          end = os::javaTimeNanos();
-          requested = e->requested;
-          actual = e->actual;
-          pointers[i] = client_ptr;
-          if (mem_tag == mtNone) {
-            fprintf(stderr, "MALLOC?\n");
-          }
-        } else if (IS_REALLOC(e)) {
-          // the recorded "realloc" was captured in a different process,
-          // so find the corresponding "malloc" or "realloc" in this process
-          for (off_t j = i-1; j >= 0; j--) {
-            Entry *p = &records_file_entries[j];
-            if (e->old == p->ptr) {
-              address ptr = pointers[j];
-              requested -= p->requested;
-              actual -= p->actual;
-              start = os::javaTimeNanos();
-              {
-                ptr = (address)os::realloc(ptr, e->requested, mem_tag, stack);
-              }
-              end = os::javaTimeNanos();
-              requested += e->requested;
-              actual += e->actual;
-              pointers[i] = ptr;
-              pointers[j] = nullptr;
-              break;
-            }
-            if (mem_tag == mtNone) {
-              fprintf(stderr, "REALLOC?\n");
-            }
-          }
-        } else if (IS_FREE(e)) {
-          // the recorded "free" was captured in a different process,
-          // so find the corresponding "malloc" or "realloc" in this process
-          for (off_t j = i-1; j >= 0; j--) {
-            Entry *p = &records_file_entries[j];
-            if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
-              mem_tag = NMTUtil::index_to_tag((int)p->mem_tag);
-              void* ptr = pointers[j];
-              requested -= p->requested;
-              actual -= p->actual;
-              start = os::javaTimeNanos();
-              {
-                os::free(ptr);
-              }
-              end = os::javaTimeNanos();
-              pointers[i] = nullptr;
-              pointers[j] = nullptr;
-              break;
-            }
-          }
-          if (mem_tag == mtNone) {
-            fprintf(stderr, "FREE?\n");
-          }
-        } else {
-          fprintf(stderr, "HUH?\n");
-          os::exit(-1);
-        }
-        requestedTotal += requested;
-        actualTotal += actual;
-
-        requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
-        allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
-        if (IS_FREE(e)) {
-          nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
-        } else {
-          nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
-        }
-      }
-      jlong duration = (start > 0) ? (end - start) : 0;
-      nanoseconds += duration;
-
-      _write_and_check(benchmark_fd, &duration, sizeof(duration));
-      _write_and_check(benchmark_fd, &requested, sizeof(requested));
-      _write_and_check(benchmark_fd, &actual, sizeof(actual));
-      char type = (IS_MALLOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
-      _write_and_check(benchmark_fd, &type, sizeof(type));
-      //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
     }
-
-    jlong overhead = actualTotal - requestedTotal;
-    double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
-    size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
-    fprintf(stderr, "\n\n\nmalloc summary:\n\n");
-    fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
-    fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes, overhead=%'zu bytes [%2.2f%%]\n", requestedTotal, actualTotal, overhead, overheadPercentage);
-    fprintf(stderr, "requested total=%'zu, actual total=%'zu, NMT headers=%'zu\n", requestedTotal, actualTotal, overhead_NMT);
-    fprintf(stderr, "\n");
-    fprintf(stderr, "%22s: %12s: %12s: %12s:\n", "NMT category", "objects", "bytes", "overhead");
-    fprintf(stderr, "-----------------------------------------------------------------\n");
-    for (int i = 0; i < mt_number_of_tags; i++) {
-      double overhead = 0.0;
-      if (requestedByCategory[i] > 0) {
-        overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
-      }
-      fprintf(stderr, "%22s: %'12ld %'12ld         [%.2f%%]\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], overhead);
-    }
-    _close_and_check(log_fi.fd);
-    _close_and_check(records_fi.fd);
-    _close_and_check(benchmark_fd);
-    FREE_C_HEAP_ARRAY(char, benchmark_file_path);
-
-    for (off_t i = 0; i < count; i++) {
-      if (pointers[i] != nullptr) {
-        os::free(pointers[i]);
-        pointers[i] = nullptr;
-      }
-    }
-    munmap((void*)pointers, size_pointers);
-
-    recorder->unlock();
-
-    os::exit(0);
   }
+  munmap((void*)pointers, size_pointers);
+
+  recorder->unlock();
+
+  os::exit(0);
 }
 
 void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack) {
@@ -656,95 +651,91 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
   recorder->unlock();
 }
 
-void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
-    //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
-  if ((pid != 0) && ((path == nullptr) || (strlen(path) == 0))) {
-    static const char *home = ".";
-    path = home;
-  }
-  if ((path != nullptr) && (strlen(path) > 0)) {
-    // compare the recorded and current levels of NMT and exit if different
-    //    file_info log_fi = _open_file_and_read(INFO_LOG_FILE, path, pid);
-    //    size_t* status_file_bytes = (size_t*)log_fi.ptr;
-    //    NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
-    //    if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
-    //      tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
-    //      tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-    //      os::exit(-1);
-    //    }
+void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
+  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
+  static const char *path = ".";
+  // compare the recorded and current levels of NMT and exit if different
+  //    file_info log_fi = _open_file_and_read(INFO_LOG_FILE, path, pid);
+  //    size_t* status_file_bytes = (size_t*)log_fi.ptr;
+  //    NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
+  //    if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
+  //      tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
+  //      tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
+  //      os::exit(-1);
+  //    }
 
-    // open records file for reading the virtual memory allocations to "play back"
-    file_info records_fi = _open_file_and_read(VALLOCS_LOG_FILE, path, pid);
-    Entry* records_file_entries = (Entry*)records_fi.ptr;
-    long int count = (records_fi.size / sizeof(Entry));
+  // open records file for reading the virtual memory allocations to "play back"
+  file_info records_fi = _open_file_and_read(VALLOCS_LOG_FILE, path, pid);
+  Entry* records_file_entries = (Entry*)records_fi.ptr;
+  long int count = (records_fi.size / sizeof(Entry));
 
-    jlong total = 0;
-    //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
-    for (off_t i = 0; i < count; i++) {
-      Entry *e = &records_file_entries[i];
+  jlong total = 0;
+  //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
+  for (off_t i = 0; i < count; i++) {
+    Entry *e = &records_file_entries[i];
 
-      MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
-      int frameCount;
-      for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
-        if (e->stack[frameCount] == 0) {
-          break;
-        }
+    MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
+    int frameCount;
+    for (frameCount = 0; frameCount < NMT_TrackingStackDepth; frameCount++) {
+      if (e->stack[frameCount] == 0) {
+        break;
       }
-      NativeCallStack stack = NativeCallStack::empty_stack();
-      if (frameCount > 0) {
-        stack = NativeCallStack(e->stack, frameCount);
-      }
-
-      jlong start = os::javaTimeNanos();
-      {
-        switch (e->type) {
-          case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
-            //fprintf(stderr, "[record_virtual_memory_reserve(%p, %zu, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
-            MemTracker::record_virtual_memory_reserve(e->ptr, e->size, stack, mem_tag);
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::RELEASE:
-            //fprintf(stderr, "[record_virtual_memory_release(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
-            MemTracker::record_virtual_memory_release(e->ptr, e->size);
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT:
-            //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
-            MemTracker::record_virtual_memory_uncommit(e->ptr, e->size);
-            //fprintf(stderr, ">\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT:
-            //fprintf(stderr, "[MemTracker::record_virtual_memory_reserve_and_commit\n");
-            MemTracker::record_virtual_memory_reserve_and_commit(e->ptr, e->size, stack, mem_tag);
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::COMMIT:
-            //fprintf(stderr, "[record_virtual_memory_commit(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
-            MemTracker::record_virtual_memory_commit(e->ptr, e->size, stack);
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED:
-            //fprintf(stderr, "[MemTracker::record_virtual_memory_split_reserved\n");
-            MemTracker::record_virtual_memory_split_reserved(e->ptr, e->size, e->size_split, mem_tag, NMTUtil::index_to_tag((int)e->mem_tag_split));
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          case NMT_VirtualMemoryLogRecorder::Type::TAG:
-            //fprintf(stderr, "[record_virtual_memory_type(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
-            MemTracker::record_virtual_memory_tag(e->ptr, mem_tag);
-            //fprintf(stderr, "]\n");fflush(stderr);
-            break;
-          default:
-            fprintf(stderr, "HUH?\n");
-            os::exit(-1);
-            break;
-        }
-      }
-      jlong end = os::javaTimeNanos();
-      jlong duration = (start > 0) ? (end - start) : 0;
-      total += duration;
     }
-    fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
-    fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
+    NativeCallStack stack = NativeCallStack::empty_stack();
+    if (frameCount > 0) {
+      stack = NativeCallStack(e->stack, frameCount);
+    }
+
+    jlong start = os::javaTimeNanos();
+    {
+      switch (e->type) {
+        case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
+          //fprintf(stderr, "[record_virtual_memory_reserve(%p, %zu, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
+          MemTracker::record_virtual_memory_reserve(e->ptr, e->size, stack, mem_tag);
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::RELEASE:
+          //fprintf(stderr, "[record_virtual_memory_release(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+          MemTracker::record_virtual_memory_release(e->ptr, e->size);
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT:
+          //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+          MemTracker::record_virtual_memory_uncommit(e->ptr, e->size);
+          //fprintf(stderr, ">\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT:
+          //fprintf(stderr, "[MemTracker::record_virtual_memory_reserve_and_commit\n");
+          MemTracker::record_virtual_memory_reserve_and_commit(e->ptr, e->size, stack, mem_tag);
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::COMMIT:
+          //fprintf(stderr, "[record_virtual_memory_commit(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+          MemTracker::record_virtual_memory_commit(e->ptr, e->size, stack);
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED:
+          //fprintf(stderr, "[MemTracker::record_virtual_memory_split_reserved\n");
+          MemTracker::record_virtual_memory_split_reserved(e->ptr, e->size, e->size_split, mem_tag, NMTUtil::index_to_tag((int)e->mem_tag_split));
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        case NMT_VirtualMemoryLogRecorder::Type::TAG:
+          //fprintf(stderr, "[record_virtual_memory_type(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+          MemTracker::record_virtual_memory_tag(e->ptr, mem_tag);
+          //fprintf(stderr, "]\n");fflush(stderr);
+          break;
+        default:
+          fprintf(stderr, "HUH?\n");
+          os::exit(-1);
+          break;
+      }
+    }
+    jlong end = os::javaTimeNanos();
+    jlong duration = (start > 0) ? (end - start) : 0;
+    total += duration;
+  }
+  fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
+  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
 
 //    if (count > 0) {
 //      nullStream bench_null;
@@ -758,10 +749,9 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
 //      }
 //    }
 
-    _close_and_check(records_fi.fd);
+  _close_and_check(records_fi.fd);
 
-    os::exit(0);
-  }
+  os::exit(0);
 }
 
 void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {

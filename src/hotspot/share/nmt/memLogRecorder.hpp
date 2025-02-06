@@ -52,7 +52,7 @@ protected:
 public:
   static void initialize(intx memoryCount, intx virtualMemoryCount);
   static void finish();
-  static void replay(const char* path, const int pid);
+  static void replay(const int pid);
   static void logThreadName(const char* name);
   static size_t mallocSize(void* ptr);
 
@@ -96,7 +96,7 @@ public:
   }
   static void print(Entry *e);
   static void finish(void);
-  static void replay(const char* path, const int pid);
+  static void replay(const int pid);
   static void log_free(void *ptr);
   static void log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old = nullptr);
   static void printActualSizesFor(const char* list);
@@ -140,7 +140,7 @@ public:
   };
   static void initialize(intx count);
   static void finish(void);
-  static void replay(const char* path, const int pid);
+  static void replay(const int pid);
   static void log_virtual_memory_reserve(void* addr, size_t size, const NativeCallStack& stack, MemTag mem_tag = mtNone);
   static void log_virtual_memory_release(address addr, size_t size);
   static void log_virtual_memory_uncommit(address addr, size_t size);

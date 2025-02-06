@@ -96,7 +96,7 @@ void MemTracker::initialize() {
     MallocLimitHandler::print_on(&ls);
   }
 
-  NMT_LogRecorder::replay(NMTBenchmarkRecordedDir, NMTBenchmarkRecordedPID);
+  NMT_LogRecorder::replay(NMTBenchmarkRecordedPID);
 }
 
 // Report during error reporting.
