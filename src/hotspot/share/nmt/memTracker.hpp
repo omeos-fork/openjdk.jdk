@@ -77,10 +77,10 @@ class MemTracker : AllStatic {
   }
 
   static inline void* record_malloc(void* mem_base, size_t size, MemTag mem_tag,
-    const NativeCallStack& stack) {
+    const NativeCallStack& stack, void* old_base = nullptr) {
     assert(mem_base != nullptr, "caller should handle null");
     if (enabled()) {
-      return MallocTracker::record_malloc(mem_base, size, mem_tag, stack);
+      return MallocTracker::record_malloc(mem_base, size, mem_tag, stack, old_base);
     }
     return mem_base;
   }

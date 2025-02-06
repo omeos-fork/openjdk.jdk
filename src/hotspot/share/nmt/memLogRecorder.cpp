@@ -494,12 +494,14 @@ void NMT_MemoryLogRecorder::replay(const char* path, const int pid) {
       _write_and_check(benchmark_fd, &type, sizeof(type));
       //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
     }
+
     jlong overhead = actualTotal - requestedTotal;
     double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
-    fprintf(stderr, "\n\n\nSummary:\n\n");
+    size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
+    fprintf(stderr, "\n\n\nmalloc summary:\n\n");
     fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
-    fprintf(stderr, "memory overhead=%'zu bytes [%2.2f%%]\n", overhead, overheadPercentage);
-    fprintf(stderr, "requestedTotal=%'zu actualTotal=%'zu\n", requestedTotal, actualTotal);
+    fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes, overhead=%'zu bytes [%2.2f%%]\n", requestedTotal, actualTotal, overhead, overheadPercentage);
+    fprintf(stderr, "requested total=%'zu, actual total=%'zu, NMT headers=%'zu\n", requestedTotal, actualTotal, overhead_NMT);
     fprintf(stderr, "\n");
     fprintf(stderr, "%22s: %12s: %12s: %12s:\n", "NMT category", "objects", "bytes", "overhead");
     fprintf(stderr, "-----------------------------------------------------------------\n");
@@ -537,17 +539,18 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
     if (count < recorder->_limit) {
       Entry entry;
       entry.time = count;
-      if (MemTracker::is_initialized())
-      {
+      if (MemTracker::is_initialized()) {
         entry.time = os::javaTimeNanos();
       }
       entry.thread = os::current_thread_id();
       entry.ptr = ptr;
       entry.old = old;
       entry.requested = requested;
+      if (entry.requested > 0) {
+        entry.requested += MemTracker::overhead_per_malloc();
+      }
       entry.actual = 0;
-      if (entry.requested > 0)
-      {
+      if (entry.requested > 0) {
         entry.actual = NMT_LogRecorder::mallocSize(ptr);
       }
 
@@ -571,20 +574,13 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
   }
 }
 
-void NMT_MemoryLogRecorder::log_free(void *ptr)
-{
+void NMT_MemoryLogRecorder::log_free(void *ptr) {
+  //fprintf(stderr, "NMT_MemoryLogRecorder::log(%16p)\n", ptr);
   NMT_MemoryLogRecorder::_log(mtNone, 0, (address)ptr, nullptr, nullptr);
 }
 
-void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack)
-{
-  NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, nullptr, stack);
-}
-
-void NMT_MemoryLogRecorder::log_realloc(MemTag mem_tag, size_t requested, void* ptr, void* old, const NativeCallStack *stack)
-{
-  if (old == nullptr)
-  {
+void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old) {
+  if (old == nullptr) {
     // mark the realloc's old pointer, so that we can tell realloc(NULL) and malloc() apart
     old = REALLOC_MARKER;
   }
@@ -630,7 +626,6 @@ void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
     recorder->_limit = limit;
     if (recorder->_limit > 0) {
       recorder->_log_fd = _prepare_log_file(nullptr, VALLOCS_LOG_FILE);
-      fprintf(stderr, ">> _memLogRecorder._log_fd:%d\n", recorder->_log_fd);
       recorder->_done = false;
     } else {
       recorder->_done = true;
@@ -640,7 +635,6 @@ void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
 }
 
 void NMT_VirtualMemoryLogRecorder::finish(void) {
-  fprintf(stderr, "NMT_VirtualMemoryLogRecorder::finish()\n");
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   if (recorder->lockIfNotDone()) {
       volatile int log_fd = recorder->_log_fd;
@@ -650,14 +644,12 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
   }
 
   int info_fd = _prepare_log_file(nullptr, INFO_LOG_FILE);
-  fprintf(stderr, " info_fd:%d\n", info_fd);
   if (info_fd != -1) {
     size_t level = NMTUtil::parse_tracking_level(NativeMemoryTracking);
     _write_and_check(info_fd, &level, sizeof(level));
     size_t overhead = MemTracker::overhead_per_malloc();
     _write_and_check(info_fd, &overhead, sizeof(overhead));
     info_fd = _close_and_check(info_fd);
-    fprintf(stderr, " info_fd:%d\n", info_fd);
   }
 
   recorder->_done = true;
@@ -751,6 +743,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const char* path, const int pid) {
       jlong duration = (start > 0) ? (end - start) : 0;
       total += duration;
     }
+    fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
     fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
 
 //    if (count > 0) {

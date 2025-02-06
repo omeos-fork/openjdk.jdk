@@ -98,8 +98,7 @@ public:
   static void finish(void);
   static void replay(const char* path, const int pid);
   static void log_free(void *ptr);
-  static void log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack);
-  static void log_realloc(MemTag mem_tag, size_t requested, void* ptr, void* old, const NativeCallStack *stack);
+  static void log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old = nullptr);
   static void printActualSizesFor(const char* list);
 
 private:
