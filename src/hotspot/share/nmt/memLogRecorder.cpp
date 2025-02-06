@@ -666,6 +666,9 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
 
   // open records file for reading the virtual memory allocations to "play back"
   file_info records_fi = _open_file_and_read(VALLOCS_LOG_FILE, path, pid);
+  if (records_fi.fd == -1) {
+    return;
+  }
   Entry* records_file_entries = (Entry*)records_fi.ptr;
   long int count = (records_fi.size / sizeof(Entry));
 
@@ -750,8 +753,6 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
 //    }
 
   _close_and_check(records_fi.fd);
-
-  os::exit(0);
 }
 
 void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {
