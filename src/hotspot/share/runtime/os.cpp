@@ -679,6 +679,7 @@ void* os::realloc(void *memblock, size_t size, MemTag mem_tag) {
 }
 
 void* os::realloc(void *memblock, size_t size, MemTag mem_tag, const NativeCallStack& stack) {
+
   // Special handling for NMT preinit phase before arguments are parsed
   void* rc = nullptr;
   if (NMTPreInit::handle_realloc(&rc, memblock, size, mem_tag)) {
@@ -731,7 +732,6 @@ void* os::realloc(void *memblock, size_t size, MemTag mem_tag, const NativeCallS
       header->revive();
       return nullptr;
     }
-
     // realloc(3) succeeded, variable header now points to invalid memory and we need to deaccount the old block.
     MemTracker::deaccount(free_info);
 
@@ -765,6 +765,7 @@ void* os::realloc(void *memblock, size_t size, MemTag mem_tag, const NativeCallS
 }
 
 void  os::free(void *memblock) {
+
   // Special handling for NMT preinit phase before arguments are parsed
   if (NMTPreInit::handle_free(memblock)) {
     return;

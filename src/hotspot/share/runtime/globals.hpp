@@ -589,9 +589,6 @@ const int ObjectAlignmentInBytes = 8;
           " max_jint (0x7FFFFFFF): keep recording until the process exits") \
           range(0, max_jint)                                                \
                                                                             \
-  product(ccstr, NMTBenchmarkRecordedDir, nullptr, DIAGNOSTIC,              \
-          "Benchmark memory allocations using results found in folder")     \
-                                                                            \
   product(int, NMTBenchmarkRecordedPID, 0, DIAGNOSTIC,                      \
           "Benchmark memory allocations using results recorderd with PID")  \
           range(0, max_jint)                                                \
