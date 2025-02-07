@@ -356,7 +356,6 @@ class Thread: public ThreadShadow {
   void set_native_thread_name(const char *name) {
     assert(Thread::current() == this, "set_native_thread_name can only be called on the current thread");
     os::set_native_thread_name(name);
-    NMT_LogRecorder::logThreadName(name);
   }
 
   // Support for Unhandled Oop detection

@@ -40,11 +40,9 @@ protected:
   intx _count  = 0;
   int _log_fd;
   volatile bool _done = true;
-  static constexpr size_t _threads_name_length = 32;
-  volatile size_t _threads_names_capacity = 128;
   volatile size_t _threads_names_counter = 0;
   typedef struct thread_name_info {
-    char name[_threads_name_length];
+    char name[MAXTHREADNAMESIZE];
     intx thread;
   } thread_name_info;
   thread_name_info *_threads_names = nullptr;
@@ -61,12 +59,12 @@ public:
   bool lockIfNotDone();
   void lock();
   void unlock();
+  intx thread_id();
+  void thread_name(char* buf);
   bool done() {
     return _done;
   }
-
-private:
-  void _logThreadName(const char* name);
+  void logThreadName();
 };
 
 class NMT_MemoryLogRecorder : public NMT_LogRecorder {

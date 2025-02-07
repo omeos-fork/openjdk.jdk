@@ -925,8 +925,6 @@ void Threads::destroy_vm() {
       nu.wait(0);
   }
 
-  NMT_LogRecorder::finish();
-
   EventShutdown e;
   if (e.should_commit()) {
     e.set_reason("No remaining non-daemon Java threads");

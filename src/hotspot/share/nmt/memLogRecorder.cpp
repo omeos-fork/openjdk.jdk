@@ -102,7 +102,8 @@ void NMT_LogRecorder::init() {
  // ???
 #endif
   pthread_mutex_init(&_mutex, NULL);
-  _threads_names = nullptr;
+  _threads_names_counter = 1;
+  _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_counter, sizeof(thread_name_info));
   _done = true;
   _count = 0;
 }
@@ -132,26 +133,43 @@ void NMT_LogRecorder::unlock() {
 #endif
 }
 
-void NMT_LogRecorder::logThreadName(const char* name) {
-  NMT_MemoryLogRecorder::instance()->_logThreadName(name);
+intx NMT_LogRecorder::thread_id() {
+#if defined(LINUX) || defined(__APPLE__)
+  return (intx)pthread_self();
+#elif defined(WINDOWS)
+  // TODO
+  return 0;
+#endif
 }
-void NMT_LogRecorder::_logThreadName(const char* name) {
-  if (_done) {
-    return;
-  }
-  if (_threads_names == nullptr) {
-    _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_capacity, sizeof(thread_name_info));
-  }
-  if (_threads_names_counter < _threads_names_capacity) {
-    volatile size_t counter = _threads_names_counter++;
-    if (counter < _threads_names_capacity) {
-      strncpy((char*)_threads_names[counter].name, name, _threads_name_length-1);
-      _threads_names[counter].thread = os::current_thread_id();
-    }
+
+void NMT_LogRecorder::thread_name(char* buf) {
+#if defined(__APPLE__)
+  if (pthread_main_np()) {
+    strcpy(buf, "main");
   } else {
-    _threads_names_capacity *= 2;
-    _threads_names = (thread_name_info*)permit_forbidden_function::realloc((void*)_threads_names, _threads_names_capacity*sizeof(thread_name_info));
-      logThreadName(name);
+    pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
+  }
+#elif defined(LINUX)
+  // TODO
+#elif defined(WINDOWS)
+  // TODO
+  return 0;
+#endif
+}
+
+void NMT_LogRecorder::logThreadName() {
+  for (size_t i = 0; i < _threads_names_counter; i++) {
+    if (_threads_names[i].thread == thread_id()) {
+      return;
+    }
+  }
+  static char name[MAXTHREADNAMESIZE];
+  thread_name(name);
+  if (strlen(name) > 0) {
+    _threads_names_counter++;
+    _threads_names = (thread_name_info*)permit_forbidden_function::realloc((void*)_threads_names, (_threads_names_counter+1)*sizeof(thread_name_info));
+    _threads_names[_threads_names_counter-1].thread = thread_id();
+    strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE-1);
   }
 }
 
@@ -304,31 +322,31 @@ void NMT_MemoryLogRecorder::initialize(intx limit) {
 
 void NMT_MemoryLogRecorder::finish(void) {
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
-  fprintf(stderr, "NMT_MemoryLogRecorder::finish() %p\n", NMT_MemoryLogRecorder::instance());
+  //fprintf(stderr, "NMT_MemoryLogRecorder::finish() %p\n", NMT_MemoryLogRecorder::instance());
   if (recorder->lockIfNotDone()) {
     volatile int log_fd = recorder->_log_fd;
     recorder->_log_fd = -1;
-    fprintf(stderr, " log_fd:%d\n", log_fd);
+    //fprintf(stderr, " log_fd:%d\n", log_fd);
     log_fd = _close_and_check(log_fd);
-    fprintf(stderr, " log_fd:%d\n", log_fd);
+    //fprintf(stderr, " log_fd:%d\n", log_fd);
 
     int threads_fd = _prepare_log_file(nullptr, THREADS_LOG_FILE);
-    fprintf(stderr, " threads_fd:%d\n", threads_fd);
+    //fprintf(stderr, " threads_fd:%d\n", threads_fd);
     if (threads_fd != -1) {
       _write_and_check(threads_fd, recorder->_threads_names, recorder->_threads_names_counter*sizeof(thread_name_info));
       threads_fd = _close_and_check(threads_fd);
-      fprintf(stderr, " threads_fd:%d\n", threads_fd);
+      //fprintf(stderr, " threads_fd:%d\n", threads_fd);
     }
 
     int info_fd = _prepare_log_file(nullptr, INFO_LOG_FILE);
-    fprintf(stderr, " info_fd:%d\n", info_fd);
+    //fprintf(stderr, " info_fd:%d\n", info_fd);
     if (info_fd != -1) {
       size_t level = NMTUtil::parse_tracking_level(NativeMemoryTracking);
       _write_and_check(info_fd, &level, sizeof(level));
       size_t overhead = MemTracker::overhead_per_malloc();
       _write_and_check(info_fd, &overhead, sizeof(overhead));
       info_fd = _close_and_check(info_fd);
-      fprintf(stderr, " info_fd:%d\n", info_fd);
+      //fprintf(stderr, " info_fd:%d\n", info_fd);
     }
 
     recorder->_done = true;
@@ -559,6 +577,8 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       if (recorder->_log_fd != -1) {
         _write_and_check(recorder->_log_fd, &entry, sizeof(Entry));
       }
+
+      recorder->logThreadName();
     } else {
       recorder->finish();
     }
