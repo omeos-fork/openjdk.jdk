@@ -24,11 +24,11 @@
 
 // record pattern of allocations of memory calls:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTRecordMemoryAllocations=0x7FFFFFFF -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
+// NMTRecordMemoryAllocations=0x7FFFFFFF ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
 //
 // OR record pattern of allocations of virtual memory calls:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NMTRecordVirtualMemoryAllocations=0x7FFFFFFF -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
+// NMTRecordVirtualMemoryAllocations=0x7FFFFFFF ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -jar build/macosx-aarch64-server-release/images/jdk/demo/jfc/J2Ddemo/J2Ddemo.jar
 //
 // this will produce 3 files:
 //
@@ -40,7 +40,7 @@
 //
 // then to actually run the benchmark:
 //
-// ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:NMTBenchmarkRecordedPID=55996
+// NMTBenchmarkRecordedPID=22770 ./build/macosx-aarch64-server-release/xcode/build/jdk/bin/java -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary
 
 #include "precompiled.hpp"
 #include "jvm.h"
