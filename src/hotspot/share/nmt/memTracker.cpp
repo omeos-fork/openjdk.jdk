@@ -53,7 +53,7 @@ NMT_TrackingLevel MemTracker::_tracking_level = NMT_unknown;
 MemBaseline MemTracker::_baseline;
 
 void MemTracker::initialize() {
-  NMT_LogRecorder::initialize(NMTRecordMemoryAllocations, NMTRecordVirtualMemoryAllocations);
+  NMT_LogRecorder::initialize();
 
   bool rc = true;
   assert(_tracking_level == NMT_unknown, "only call once");
@@ -96,7 +96,7 @@ void MemTracker::initialize() {
     MallocLimitHandler::print_on(&ls);
   }
 
-  NMT_LogRecorder::replay(NMTBenchmarkRecordedPID);
+  NMT_LogRecorder::replay();
 }
 
 // Report during error reporting.

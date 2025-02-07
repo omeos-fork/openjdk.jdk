@@ -48,9 +48,9 @@ protected:
   thread_name_info *_threads_names = nullptr;
 
 public:
-  static void initialize(intx memoryCount, intx virtualMemoryCount);
+  static void initialize();
   static void finish();
-  static void replay(const int pid);
+  static void replay();
   static void logThreadName(const char* name);
   static size_t mallocSize(void* ptr);
 

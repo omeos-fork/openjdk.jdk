@@ -76,9 +76,23 @@
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
 NMT_VirtualMemoryLogRecorder NMT_VirtualMemoryLogRecorder::_recorder;
 
-void NMT_LogRecorder::initialize(intx memoryCount, intx virtualMemoryCount) {
-  NMT_MemoryLogRecorder::initialize(NMTRecordMemoryAllocations);
-  NMT_VirtualMemoryLogRecorder::initialize(NMTRecordVirtualMemoryAllocations);
+void NMT_LogRecorder::initialize() {
+  char* NMTRecordMemoryAllocations = getenv("NMTRecordMemoryAllocations");
+  if (NMTRecordMemoryAllocations != nullptr) {
+    long count = atol(NMTRecordMemoryAllocations);
+    if (count == 0) {
+      count = strtol(NMTRecordMemoryAllocations, NULL, 16);
+    }
+    NMT_MemoryLogRecorder::initialize(count);
+  }
+  char* NMTRecordVirtualMemoryAllocations = getenv("NMTRecordVirtualMemoryAllocations");
+  if (NMTRecordVirtualMemoryAllocations != nullptr) {
+    long count = atol(NMTRecordVirtualMemoryAllocations);
+    if (count == 0) {
+      count = strtol(NMTRecordVirtualMemoryAllocations, NULL, 16);
+    }
+    NMT_VirtualMemoryLogRecorder::initialize(count);
+  }
 }
 
 void NMT_LogRecorder::finish() {
@@ -90,9 +104,13 @@ void NMT_LogRecorder::finish() {
   }
 }
 
-void NMT_LogRecorder::replay(const int pid) {
-  NMT_MemoryLogRecorder::instance()->replay(pid);
-  NMT_VirtualMemoryLogRecorder::instance()->replay(pid);
+void NMT_LogRecorder::replay() {
+  char* NMTBenchmarkRecordedPID = getenv("NMTBenchmarkRecordedPID");
+  if (NMTBenchmarkRecordedPID != nullptr) {
+    int pid = atoi(NMTBenchmarkRecordedPID);
+    NMT_MemoryLogRecorder::instance()->replay(pid);
+    NMT_VirtualMemoryLogRecorder::instance()->replay(pid);
+  }
 }
 
 void NMT_LogRecorder::init() {
@@ -311,7 +329,7 @@ void NMT_MemoryLogRecorder::initialize(intx limit) {
     recorder->_limit = limit;
     if (recorder->_limit > 0) {
       recorder->_log_fd = _prepare_log_file(nullptr, ALLOCS_LOG_FILE);
-      fprintf(stderr, ">> _memLogRecorder._log_fd:%d\n", recorder->_log_fd);
+      //fprintf(stderr, ">> _memLogRecorder._log_fd:%d\n", recorder->_log_fd);
       recorder->_done = false;
     } else {
       recorder->_done = true;
