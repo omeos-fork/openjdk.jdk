@@ -376,6 +376,14 @@ void NMT_MemoryLogRecorder::finish(void) {
   }
 }
 
+jlong histogramLimits[] = {32, 64, 128, 256, 512, 1024, 4096, 8192, 16896};
+//jlong histogramLimits[] = {16, 32, 48, 64, 80, 96, 112, 128, 256, 512, 1024, 4096, 8192, 16896, 65536};
+const jlong histogramLimitsSize = sizeof(histogramLimits)/sizeof(jlong);
+const char *histogramChars[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
+typedef struct HistogramBuckets {
+  jlong buckets[histogramLimitsSize+1];
+} HistogramBuckets;
+
 void NMT_MemoryLogRecorder::replay(const int pid) {
   //fprintf(stderr, "NMT_MemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
   static const char *path = ".";
@@ -422,6 +430,8 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   jlong allocatedByCategory[mt_number_of_tags] = {0};
   jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
   jlong timeByCategory[mt_number_of_tags] = {0};
+  HistogramBuckets histogramByCategory[mt_number_of_tags] = {0};
+  
   jlong nanoseconds = 0;
   jlong requestedTotal = 0;
   jlong actualTotal = 0;
@@ -529,8 +539,17 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     char type = (IS_MALLOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
     _write_and_check(benchmark_fd, &type, sizeof(type));
     //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
+
+    HistogramBuckets* histogram = &histogramByCategory[NMTUtil::tag_to_index(mem_tag)];
+    for (int s = histogramLimitsSize; s >= 0; s--) {
+      if (actual >= histogramLimits[s]) {
+        histogram->buckets[s]++;
+        break;
+      }
+    }
   }
 
+  setlocale(LC_ALL, "");
   jlong overhead = actualTotal - requestedTotal;
   double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
   size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
@@ -572,6 +591,26 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     } else {
       fprintf(stderr, "         %.1f%%", overhead);
     }
+
+    fprintf(stderr, "    ");
+
+    HistogramBuckets* histogram = &histogramByCategory[i];
+    jlong max = 0;
+    for (int s = histogramLimitsSize; s >= 0; s--) {
+      if (histogram->buckets[s] > max) {
+        max = histogram->buckets[s];
+      }
+    }
+//    fprintf(stderr, "max:%ld ", max);
+//    for (int s = histogramLimitsSize; s >= 0; s--) {
+//      double index = (100.0 * ((double)histogram->buckets[s] / (double)max));
+//      fprintf(stderr, "%.1f,", index);
+//    }
+    for (int s = histogramLimitsSize; s >= 0; s--) {
+      int index = (int)(100.0 * ((double)histogram->buckets[s] / (double)max)) % 8;
+      fprintf(stderr, "%s", histogramChars[index]);
+    }
+
     fprintf(stderr, "\n");
   }
 
