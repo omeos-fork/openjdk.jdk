@@ -73,6 +73,10 @@
 #include <sys/mman.h>
 #endif
 
+#if defined(LINUX)
+#define MAXTHREADNAMESIZE 256
+#endif
+
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
 NMT_VirtualMemoryLogRecorder NMT_VirtualMemoryLogRecorder::_recorder;
 
@@ -168,7 +172,7 @@ void NMT_LogRecorder::thread_name(char* buf) {
     pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
   }
 #elif defined(LINUX)
-  // TODO
+  pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
 #elif defined(WINDOWS)
   // TODO
   return 0;
