@@ -325,7 +325,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
 }
 
 void NMT_MemoryLogRecorder::initialize(intx limit) {
-  //fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld)\n", limit);
+  fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -648,7 +648,7 @@ static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) 
 }
 
 void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
-  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::initialize(%ld)\n", limit);
+  fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -819,7 +819,7 @@ void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type,
           entry.stack[i] = stack->get_frame(i);
         }
       }
-      fprintf(stderr, "recorder->_log_fd: %d\n", recorder->_log_fd);
+      //fprintf(stderr, "recorder->_log_fd: %d\n", recorder->_log_fd);
       if (recorder->_log_fd != -1) {
         _write_and_check(recorder->_log_fd, &entry, sizeof(Entry));
       }
