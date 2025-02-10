@@ -325,7 +325,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
 }
 
 void NMT_MemoryLogRecorder::initialize(intx limit) {
-  fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
+  //fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -421,6 +421,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   jlong requestedByCategory[mt_number_of_tags] = {0};
   jlong allocatedByCategory[mt_number_of_tags] = {0};
   jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
+  jlong timeByCategory[mt_number_of_tags] = {0};
   jlong nanoseconds = 0;
   jlong requestedTotal = 0;
   jlong actualTotal = 0;
@@ -519,6 +520,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       }
     }
     jlong duration = (start > 0) ? (end - start) : 0;
+    timeByCategory[NMTUtil::tag_to_index(mem_tag)] += duration;
     nanoseconds += duration;
 
     _write_and_check(benchmark_fd, &duration, sizeof(duration));
@@ -538,15 +540,41 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   double overheadPercentageNMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
   fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead, overheadPercentage, overhead_NMT, overheadPercentageNMT);
   fprintf(stderr, "\n");
-  fprintf(stderr, "%22s: %12s: %12s: %12s:\n", "NMT category", "objects", "bytes", "overhead");
-  fprintf(stderr, "-----------------------------------------------------------------\n");
+
+  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "count%", "bytes%", "time%", "overhead");
+  fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
   for (int i = 0; i < mt_number_of_tags; i++) {
     double overhead = 0.0;
     if (requestedByCategory[i] > 0) {
       overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
     }
-    fprintf(stderr, "%22s: %'12ld %'12ld         [%.2f%%]\n", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], overhead);
+    fprintf(stderr, "%22s: %'12ld  %'12ld   %'12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
+    double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)count);
+    if (countPercentage > 10.0) {
+      fprintf(stderr, "        %.1f%%", countPercentage);
+    } else {
+      fprintf(stderr, "         %.1f%%", countPercentage);
+    }
+    double bytesPercentage = 100.0 * ((double)allocatedByCategory[i] / (double)actualTotal);
+    if (bytesPercentage > 10.0) {
+      fprintf(stderr, "         %.1f%%", bytesPercentage);
+    } else {
+      fprintf(stderr, "          %.1f%%", bytesPercentage);
+    }
+    double timePercentage = 100.0 * ((double)timeByCategory[i] / (double)nanoseconds);
+    if (timePercentage > 10.0) {
+      fprintf(stderr, "          %.1f%%", timePercentage);
+    } else {
+      fprintf(stderr, "           %.1f%%", timePercentage);
+    }
+    if (overhead > 10.0) {
+      fprintf(stderr, "        %.1f%%", overhead);
+    } else {
+      fprintf(stderr, "         %.1f%%", overhead);
+    }
+    fprintf(stderr, "\n");
   }
+
   _close_and_check(log_fi.fd);
   _close_and_check(records_fi.fd);
   _close_and_check(benchmark_fd);
@@ -648,7 +676,7 @@ static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) 
 }
 
 void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
-  fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
+  //fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
