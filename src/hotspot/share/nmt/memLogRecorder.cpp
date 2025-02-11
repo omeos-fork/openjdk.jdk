@@ -434,6 +434,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   jlong nanoseconds = 0;
   jlong requestedTotal = 0;
   jlong actualTotal = 0;
+  jlong headers = 0;
   for (off_t i = 0; i < count; i++) {
     Entry *e = &records_file_entries[i];
     MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
@@ -462,6 +463,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
         end = os::javaTimeNanos();
         requested = e->requested;
         actual = e->actual;
+        headers++;
         pointers[i] = client_ptr;
         if (mem_tag == mtNone) {
           fprintf(stderr, "MALLOC?\n");
@@ -507,6 +509,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
             end = os::javaTimeNanos();
             pointers[i] = nullptr;
             pointers[j] = nullptr;
+            headers--;
             break;
           }
         }
@@ -549,17 +552,17 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   setlocale(LC_ALL, "");
-  size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
+  size_t overhead_NMT = headers * MemTracker::overhead_per_malloc();
   jlong overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary:\n\n");
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
-  fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes, \n", requestedTotal, actualTotal);
+  fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%'ld]\n", nanoseconds, count, headers);
+  fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes\n", requestedTotal, actualTotal);
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
   fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
   fprintf(stderr, "\n");
 
-  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "count%", "bytes%", "time%", "overhead%");
+  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "objects%", "bytes%", "time%", "overhead%");
   fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
   for (int i = 0; i < mt_number_of_tags; i++) {
     double overhead = 0.0;
@@ -567,7 +570,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
     }
     fprintf(stderr, "%22s: %'12ld  %'12ld   %'12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
-    double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)count);
+    double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)headers);
     if (countPercentage > 10.0) {
       fprintf(stderr, "        %.1f%%", countPercentage);
     } else {
