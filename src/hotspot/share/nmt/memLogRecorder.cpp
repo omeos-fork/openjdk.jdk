@@ -175,7 +175,6 @@ void NMT_LogRecorder::thread_name(char* buf) {
   pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
 #elif defined(WINDOWS)
   // TODO
-  return 0;
 #endif
 }
 
@@ -594,7 +593,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       fprintf(stderr, "          %.1f%%", overhead);
     }
     fprintf(stderr, "    ");
-
+    
     HistogramBuckets* histogram = &histogramByCategory[i];
     jlong max = 0;
     for (int s = histogramLimitsSize; s >= 0; s--) {
@@ -602,16 +601,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
         max = histogram->buckets[s];
       }
     }
-//    fprintf(stderr, "max:%ld ", max);
-//    for (int s = 0; s < histogramLimitsSize; s++) {
-//      double index = (100.0 * ((double)histogram->buckets[s] / (double)max));
-//      fprintf(stderr, "%.1f,", index);
-//    }
     for (int s = 0; s < histogramLimitsSize; s++) {
       int index = (int)(100.0 * ((double)histogram->buckets[s] / (double)max)) % 8;
       fprintf(stderr, "%s", histogramChars[index]);
     }
-
     fprintf(stderr, "\n");
   }
 
