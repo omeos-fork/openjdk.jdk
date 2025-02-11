@@ -550,17 +550,17 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   setlocale(LC_ALL, "");
-  jlong overhead = actualTotal - requestedTotal;
-  double overheadPercentage = 100.0 * (double)overhead / (double)requestedTotal;
   size_t overhead_NMT = count * MemTracker::overhead_per_malloc();
+  jlong overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
+  double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary:\n\n");
   fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", nanoseconds, count);
   fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes, \n", requestedTotal, actualTotal);
-  double overheadPercentageNMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
-  fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead, overheadPercentage, overhead_NMT, overheadPercentageNMT);
+  double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
+  fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
   fprintf(stderr, "\n");
 
-  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "count%", "bytes%", "time%", "overhead");
+  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "count%", "bytes%", "time%", "overhead%");
   fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
   for (int i = 0; i < mt_number_of_tags; i++) {
     double overhead = 0.0;
@@ -582,16 +582,17 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     }
     double timePercentage = 100.0 * ((double)timeByCategory[i] / (double)nanoseconds);
     if (timePercentage > 10.0) {
+      fprintf(stderr, "         %.1f%%", timePercentage);
+    } else {
       fprintf(stderr, "          %.1f%%", timePercentage);
-    } else {
-      fprintf(stderr, "           %.1f%%", timePercentage);
     }
-    if (overhead > 10.0) {
+    if (overhead > 100.0) {
       fprintf(stderr, "        %.1f%%", overhead);
-    } else {
+    } else if (overhead > 10.0) {
       fprintf(stderr, "         %.1f%%", overhead);
+    } else {
+      fprintf(stderr, "          %.1f%%", overhead);
     }
-
     fprintf(stderr, "    ");
 
     HistogramBuckets* histogram = &histogramByCategory[i];
@@ -648,7 +649,7 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       entry.old = old;
       entry.requested = requested;
       if (entry.requested > 0) {
-        entry.requested += MemTracker::overhead_per_malloc();
+        //entry.requested += MemTracker::overhead_per_malloc();
       }
       entry.actual = 0;
       if (entry.requested > 0) {
