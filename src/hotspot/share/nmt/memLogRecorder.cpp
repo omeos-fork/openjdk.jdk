@@ -520,7 +520,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       }
       requestedTotal += requested;
       actualTotal += actual;
-
+      
       requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
       allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
       if (IS_FREE(e)) {
@@ -538,7 +538,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     _write_and_check(benchmark_fd, &actual, sizeof(actual));
     char type = (IS_MALLOC(e) * 1) | (IS_REALLOC(e) * 2) | (IS_FREE(e) * 4);
     _write_and_check(benchmark_fd, &type, sizeof(type));
-    //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALOC(e), IS_REALLOC(e), IS_FREE(e));
+    //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALLOC(e), IS_REALLOC(e), IS_FREE(e));
 
     HistogramBuckets* histogram = &histogramByCategory[NMTUtil::tag_to_index(mem_tag)];
     for (int s = histogramLimitsSize; s >= 0; s--) {
@@ -602,11 +602,11 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       }
     }
 //    fprintf(stderr, "max:%ld ", max);
-//    for (int s = histogramLimitsSize; s >= 0; s--) {
+//    for (int s = 0; s < histogramLimitsSize; s++) {
 //      double index = (100.0 * ((double)histogram->buckets[s] / (double)max));
 //      fprintf(stderr, "%.1f,", index);
 //    }
-    for (int s = histogramLimitsSize; s >= 0; s--) {
+    for (int s = 0; s < histogramLimitsSize; s++) {
       int index = (int)(100.0 * ((double)histogram->buckets[s] / (double)max)) % 8;
       fprintf(stderr, "%s", histogramChars[index]);
     }
@@ -632,7 +632,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   os::exit(0);
 }
 
-void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack) {
+void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack){
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   //fprintf(stderr, "NMT_MemoryLogRecorder::log(%16s, %6ld, %12p, %12p)\n", NMTUtil::tag_to_name(mem_tag), requested, ptr, old);
   if (recorder->lockIfNotDone()) {
