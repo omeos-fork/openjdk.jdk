@@ -72,7 +72,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #endif
-  
+
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
 NMT_VirtualMemoryLogRecorder NMT_VirtualMemoryLogRecorder::_recorder;
 
