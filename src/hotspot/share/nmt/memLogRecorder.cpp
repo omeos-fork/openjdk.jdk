@@ -736,7 +736,7 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
   int info_fd = _prepare_log_file(nullptr, INFO_LOG_FILE);
   if (info_fd != -1) {
     size_t mode = NMTUtil::parse_tracking_level(NativeMemoryTracking);
-    _write_and_check(info_fd, &level, sizeof(mode));
+    _write_and_check(info_fd, &mode, sizeof(mode));
     size_t overhead = MemTracker::overhead_per_malloc();
     _write_and_check(info_fd, &overhead, sizeof(overhead));
     info_fd = _close_and_check(info_fd);
