@@ -73,10 +73,6 @@
 #include <sys/mman.h>
 #endif
 
-#if defined(LINUX)
-#define MAXTHREADNAMESIZE 256
-#endif
-
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
 NMT_VirtualMemoryLogRecorder NMT_VirtualMemoryLogRecorder::_recorder;
 
@@ -430,7 +426,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
   jlong timeByCategory[mt_number_of_tags] = {0};
   HistogramBuckets histogramByCategory[mt_number_of_tags] = {0};
-  
+
   jlong nanoseconds = 0;
   jlong requestedTotal = 0;
   jlong actualTotal = 0;
@@ -522,7 +518,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       }
       requestedTotal += requested;
       actualTotal += actual;
-      
+
       requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
       allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
       if (IS_FREE(e)) {
@@ -596,7 +592,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       fprintf(stderr, "          %.1f%%", overhead);
     }
     fprintf(stderr, "    ");
-    
+
     HistogramBuckets* histogram = &histogramByCategory[i];
     jlong max = 0;
     for (int s = histogramLimitsSize; s >= 0; s--) {

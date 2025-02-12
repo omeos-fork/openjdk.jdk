@@ -29,6 +29,10 @@
 #include "nmt/nmtCommon.hpp"
 #include "runtime/globals.hpp"
 
+#if defined(LINUX)
+#define MAXTHREADNAMESIZE 256
+#endif
+
 class NMT_LogRecorder : public StackObj {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_t _mutex;
