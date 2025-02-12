@@ -29,7 +29,7 @@
 #include "nmt/nmtCommon.hpp"
 #include "runtime/globals.hpp"
 
-#if defined(LINUX)
+#if defined(LINUX) || defined(WINDOWS)
 #define MAXTHREADNAMESIZE 256
 #endif
 

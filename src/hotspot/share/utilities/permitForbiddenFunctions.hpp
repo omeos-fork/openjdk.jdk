@@ -74,7 +74,7 @@ inline void* realloc(void* ptr, size_t size) { return ::realloc(ptr, size); }
 inline char* strdup(const char* s) { return ::strdup(s); }
 
 #if defined(LINUX)
-inline size_t malloc_usable_size(void *_Nullable ptr) { return ::malloc_usable_size(ptr); }
+inline size_t malloc_usable_size(void *ptr) { return ::malloc_usable_size(ptr); }
 #elif defined(WINDOWS)
 inline size_t _msize(void *memblock) { return ::_msize(memblock); }
 #elif defined(__APPLE__)

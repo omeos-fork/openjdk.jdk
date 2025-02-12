@@ -72,7 +72,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #endif
-
+  
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
 NMT_VirtualMemoryLogRecorder NMT_VirtualMemoryLogRecorder::_recorder;
 
@@ -459,7 +459,6 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
         end = os::javaTimeNanos();
         requested = e->requested;
         actual = e->actual;
-        headers++;
         pointers[i] = client_ptr;
         if (mem_tag == mtNone) {
           fprintf(stderr, "MALLOC?\n");
@@ -505,7 +504,6 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
             end = os::javaTimeNanos();
             pointers[i] = nullptr;
             pointers[j] = nullptr;
-            headers--;
             break;
           }
         }
@@ -522,8 +520,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
       allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
       if (IS_FREE(e)) {
+        headers--;
         nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
-      } else {
+      } else if IS_MALLOC(e) {
+        headers++;
         nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
       }
     }
@@ -735,8 +735,8 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
 
   int info_fd = _prepare_log_file(nullptr, INFO_LOG_FILE);
   if (info_fd != -1) {
-    size_t level = NMTUtil::parse_tracking_level(NativeMemoryTracking);
-    _write_and_check(info_fd, &level, sizeof(level));
+    size_t mode = NMTUtil::parse_tracking_level(NativeMemoryTracking);
+    _write_and_check(info_fd, &level, sizeof(mode));
     size_t overhead = MemTracker::overhead_per_malloc();
     _write_and_check(info_fd, &overhead, sizeof(overhead));
     info_fd = _close_and_check(info_fd);
