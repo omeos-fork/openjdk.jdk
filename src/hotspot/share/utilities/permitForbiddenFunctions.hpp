@@ -75,7 +75,7 @@ inline char* strdup(const char* s) { return ::strdup(s); }
 
 #if defined(LINUX)
 inline size_t malloc_usable_size(void *ptr) { return ::malloc_usable_size(ptr); }
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
 inline size_t _msize(void *memblock) { return ::_msize(memblock); }
 #elif defined(__APPLE__)
 inline size_t malloc_size(const void *ptr) { return ::malloc_size(ptr); }

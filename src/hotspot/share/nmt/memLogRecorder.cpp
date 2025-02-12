@@ -71,6 +71,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <string.h>
 #endif
 
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
@@ -116,7 +117,7 @@ void NMT_LogRecorder::replay() {
 void NMT_LogRecorder::init() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_t _mutex;
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
  // ???
 #endif
   pthread_mutex_init(&_mutex, NULL);
@@ -138,7 +139,7 @@ bool NMT_LogRecorder::lockIfNotDone() {
 void NMT_LogRecorder::lock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_lock(&_mutex);
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
  // ???
 #endif
 }
@@ -146,7 +147,7 @@ void NMT_LogRecorder::lock() {
 void NMT_LogRecorder::unlock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_unlock(&_mutex);
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
  // ???
 #endif
 }
@@ -154,7 +155,7 @@ void NMT_LogRecorder::unlock() {
 intx NMT_LogRecorder::thread_id() {
 #if defined(LINUX) || defined(__APPLE__)
   return (intx)pthread_self();
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
   // TODO
   return 0;
 #endif
@@ -169,7 +170,7 @@ void NMT_LogRecorder::thread_name(char* buf) {
   }
 #elif defined(LINUX)
   pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
   // TODO
 #endif
 }
@@ -194,7 +195,7 @@ size_t NMT_LogRecorder::mallocSize(void* ptr)
 {
 #if defined(LINUX)
   return permit_forbidden_function::malloc_usable_size(ptr);
-#elif defined(WINDOWS)
+#elif defined(_WIN64)
   return permit_forbidden_function::_msize(ptr);)
 #elif defined(__APPLE__)
   return permit_forbidden_function::malloc_size(ptr);
