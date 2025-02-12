@@ -117,10 +117,10 @@ void NMT_LogRecorder::replay() {
 void NMT_LogRecorder::init() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_t _mutex;
+  pthread_mutex_init(&_mutex, NULL);
 #elif defined(_WIN64)
  // ???
 #endif
-  pthread_mutex_init(&_mutex, NULL);
   _threads_names_counter = 1;
   _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_counter, sizeof(thread_name_info));
   _done = true;
