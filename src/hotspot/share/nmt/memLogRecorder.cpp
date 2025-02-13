@@ -187,7 +187,7 @@ void NMT_LogRecorder::logThreadName() {
     _threads_names_counter++;
     _threads_names = (thread_name_info*)permit_forbidden_function::realloc((void*)_threads_names, (_threads_names_counter+1)*sizeof(thread_name_info));
     _threads_names[_threads_names_counter-1].thread = thread_id();
-    strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE-1);
+    strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE);
   }
 }
 
