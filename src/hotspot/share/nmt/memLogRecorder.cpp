@@ -372,12 +372,12 @@ void NMT_MemoryLogRecorder::finish(void) {
   }
 }
 
-jlong histogramLimits[] = {32, 64, 128, 256, 512, 1024, 4096, 8192, 16896};
-//jlong histogramLimits[] = {16, 32, 48, 64, 80, 96, 112, 128, 256, 512, 1024, 4096, 8192, 16896, 65536};
-const jlong histogramLimitsSize = sizeof(histogramLimits)/sizeof(jlong);
+long int histogramLimits[] = {32, 64, 128, 256, 512, 1024, 4096, 8192, 16896};
+//long int histogramLimits[] = {16, 32, 48, 64, 80, 96, 112, 128, 256, 512, 1024, 4096, 8192, 16896, 65536};
+const long int histogramLimitsSize = sizeof(histogramLimits)/sizeof(long int);
 const char *histogramChars[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
 typedef struct HistogramBuckets {
-  jlong buckets[histogramLimitsSize+1];
+  long int buckets[histogramLimitsSize+1];
 } HistogramBuckets;
 
 void NMT_MemoryLogRecorder::replay(const int pid) {
@@ -422,16 +422,16 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     tty->print("Can't open [%s].", benchmark_file_path);
     os::exit(-1);
   }
-  jlong requestedByCategory[mt_number_of_tags] = {0};
-  jlong allocatedByCategory[mt_number_of_tags] = {0};
-  jlong nmtObjectsByCategory[mt_number_of_tags] = {0};
-  jlong timeByCategory[mt_number_of_tags] = {0};
+  long int requestedByCategory[mt_number_of_tags] = {0};
+  long int allocatedByCategory[mt_number_of_tags] = {0};
+  long int nmtObjectsByCategory[mt_number_of_tags] = {0};
+  long int timeByCategory[mt_number_of_tags] = {0};
   HistogramBuckets histogramByCategory[mt_number_of_tags] = {0};
 
-  jlong nanoseconds = 0;
-  jlong requestedTotal = 0;
-  jlong actualTotal = 0;
-  jlong headers = 0;
+  long int nanoseconds = 0;
+  long int requestedTotal = 0;
+  long int actualTotal = 0;
+  long int headers = 0;
   for (off_t i = 0; i < count; i++) {
     Entry *e = &records_file_entries[i];
     MemTag mem_tag = NMTUtil::index_to_tag((int)e->mem_tag);
@@ -445,11 +445,11 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     if (frameCount > 0) {
       stack = NativeCallStack(e->stack, frameCount);
     }
-    jlong requested = 0;
-    jlong actual = 0;
+    long int requested = 0;
+    long int actual = 0;
     pointers[i] = nullptr;
-    jlong start = 0;
-    jlong end = 0;
+    long int start = 0;
+    long int end = 0;
     {
       if (IS_MALLOC(e)) {
         address client_ptr = nullptr;
@@ -528,7 +528,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
         nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
       }
     }
-    jlong duration = (start > 0) ? (end - start) : 0;
+    long int duration = (start > 0) ? (end - start) : 0;
     timeByCategory[NMTUtil::tag_to_index(mem_tag)] += duration;
     nanoseconds += duration;
 
@@ -550,10 +550,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
 
   setlocale(LC_ALL, "");
   size_t overhead_NMT = headers * MemTracker::overhead_per_malloc();
-  jlong overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
+  long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary:\n\n");
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%'ld]\n", nanoseconds, count, headers);
+  fprintf(stderr, "time:%'lld[ns] [samples:%'lld] [NMT headers:%ld]\n", nanoseconds, count, headers);
   fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes\n", requestedTotal, actualTotal);
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
   fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
@@ -595,7 +595,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     fprintf(stderr, "    ");
 
     HistogramBuckets* histogram = &histogramByCategory[i];
-    jlong max = 0;
+    long int max = 0;
     for (int s = histogramLimitsSize; s >= 0; s--) {
       if (histogram->buckets[s] > max) {
         max = histogram->buckets[s];
@@ -768,7 +768,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
   Entry* records_file_entries = (Entry*)records_fi.ptr;
   long int count = (records_fi.size / sizeof(Entry));
 
-  jlong total = 0;
+  long int total = 0;
   //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
   for (off_t i = 0; i < count; i++) {
     Entry *e = &records_file_entries[i];
@@ -785,7 +785,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
       stack = NativeCallStack(e->stack, frameCount);
     }
 
-    jlong start = os::javaTimeNanos();
+    long int start = os::javaTimeNanos();
     {
       switch (e->type) {
         case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
@@ -829,8 +829,8 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
           break;
       }
     }
-    jlong end = os::javaTimeNanos();
-    jlong duration = (start > 0) ? (end - start) : 0;
+    long int end = os::javaTimeNanos();
+    long int duration = (start > 0) ? (end - start) : 0;
     total += duration;
   }
   fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
@@ -840,10 +840,10 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
 //      nullStream bench_null;
 //      total = 0;
 //      for (off_t l = 0; l < 1; l++) {
-//        jlong start = os::javaTimeNanos();
+//        long int start = os::javaTimeNanos();
 //        VirtualMemoryTracker::Instance::print_self(tty);
-//        jlong end = os::javaTimeNanos();
-//        jlong duration = (start > 0) ? (end - start) : 0;
+//        long int end = os::javaTimeNanos();
+//        long int duration = (start > 0) ? (end - start) : 0;
 //        total += duration;
 //      }
 //    }
