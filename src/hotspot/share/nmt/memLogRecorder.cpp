@@ -111,6 +111,7 @@ void NMT_LogRecorder::replay() {
     int pid = atoi(NMTBenchmarkRecordedPID);
     NMT_MemoryLogRecorder::instance()->replay(pid);
     NMT_VirtualMemoryLogRecorder::instance()->replay(pid);
+    os::exit(0);
   }
 }
 
