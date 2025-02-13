@@ -553,7 +553,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   size_t overhead_NMT = headers * MemTracker::overhead_per_malloc();
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
-  fprintf(stderr, "\n\n\nmalloc summary:\n\n");
+  fprintf(stderr, "\n\n\nmalloc summary [\"-XX:NativeMemoryTracking=%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
   fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
   fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes\n", requestedTotal, actualTotal);
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
