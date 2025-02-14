@@ -78,10 +78,7 @@
 
 #if defined(_WIN64)
 // TODO: suppress undefined errors for now
-#define PROT_READ 0x01
-#define PROT_WRITE 0x02
-#define MAP_PRIVATE 0x0002
-#define STDERR_FILENO 1
+#define STDERR_FILENO 2
 #define STDOUT_FILENO 1
 #endif
 
@@ -201,16 +198,6 @@ void NMT_LogRecorder::logThreadName() {
     _threads_names[_threads_names_counter-1].thread = thread_id();
     strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE);
   }
-}
-
-void *NMT_LogRecorder::mmap(void *addr, size_t len, int prot, int flags, int fd)
-{
-#if defined(LINUX) || defined(__APPLE__)
-  return ::mmap(addr, len, prot, flags, fd, 0);
-#elif defined(_WIN64)
-  // TODO: NMT_LogRecorder::mmap
-  return nullptr;
-#endif
 }
 
 size_t NMT_LogRecorder::mallocSize(void* ptr)
@@ -334,9 +321,11 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
   info.size = file_info.st_size;
   ::lseek(info.fd, 0, SEEK_SET);
 
-  info.ptr = NMT_LogRecorder::mmap(NULL, info.size, PROT_READ, MAP_PRIVATE, info.fd);
+#if !defined(_WIN64)
+  info.ptr = ::mmap(NULL, info.size, PROT_READ, MAP_PRIVATE, info.fd, 0);
   assert(info.ptr != MAP_FAILED, "info.ptr != MAP_FAILED");
-
+#endif
+  
   FREE_C_HEAP_ARRAY(char, file_path);
 
   return info;
@@ -430,8 +419,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   Entry* records_file_entries = (Entry*)records_fi.ptr;
   long int count = (long int)(records_fi.size / sizeof(Entry));
   long int size_pointers = (long int)(count * sizeof(address));
+#if !defined(_WIN64)
   address *pointers = (address*)NMT_LogRecorder::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1);
   assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
+#endif
 
   // open benchmark file for writing the final results
   char *benchmark_file_path = NEW_C_HEAP_ARRAY(char, JVM_MAXPATHLEN, mtNMT);
@@ -597,7 +588,11 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     if (requestedByCategory[i] > 0) {
       overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
     }
+#if defined(_WIN64)
+    fprintf(stderr, "%22s: %12ld  %12ld   %12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
+#else
     fprintf(stderr, "%22s: %'12ld  %'12ld   %'12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
+#endif
     double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)headers);
     if (countPercentage > 10.0) {
       fprintf(stderr, "        %.1f%%", countPercentage);
@@ -650,8 +645,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       pointers[i] = nullptr;
     }
   }
+#if !defined(_WIN64)
   munmap((void*)pointers, size_pointers);
-
+#endif
+  
   recorder->unlock();
 
   os::exit(0);
@@ -865,8 +862,11 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
     total += duration;
   }
   fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
+#if defined(_WIN64)
   fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
-
+#else
+  fprintf(stderr, "time:%ld[ns] [samples:%ld]\n", total, count);
+#endif
 //    if (count > 0) {
 //      nullStream bench_null;
 //      total = 0;
