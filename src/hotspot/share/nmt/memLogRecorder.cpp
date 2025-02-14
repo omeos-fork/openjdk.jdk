@@ -63,6 +63,9 @@
 #include <locale.h>
 #if defined(LINUX)
 #include <malloc.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/mman.h>
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #endif
@@ -197,7 +200,7 @@ size_t NMT_LogRecorder::mallocSize(void* ptr)
 #if defined(LINUX)
   return permit_forbidden_function::malloc_usable_size(ptr);
 #elif defined(_WIN64)
-  return permit_forbidden_function::_msize(ptr);)
+  return permit_forbidden_function::_msize(ptr);
 #elif defined(__APPLE__)
   return permit_forbidden_function::malloc_size(ptr);
 #endif
@@ -375,7 +378,7 @@ void NMT_MemoryLogRecorder::finish(void) {
 
 long int histogramLimits[] = {32, 64, 128, 256, 512, 1024, 4096, 8192, 16896};
 //long int histogramLimits[] = {16, 32, 48, 64, 80, 96, 112, 128, 256, 512, 1024, 4096, 8192, 16896, 65536};
-const long int histogramLimitsSize = sizeof(histogramLimits)/sizeof(long int);
+const long int histogramLimitsSize = (long int)(sizeof(histogramLimits)/sizeof(long int));
 const char *histogramChars[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"};
 typedef struct HistogramBuckets {
   long int buckets[histogramLimitsSize+1];
@@ -407,8 +410,8 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     return;
   }
   Entry* records_file_entries = (Entry*)records_fi.ptr;
-  long int count = (records_fi.size / sizeof(Entry));
-  size_t size_pointers = count * sizeof(address);
+  long int count = (long int)(records_fi.size / sizeof(Entry));
+  long int size_pointers = (long int)(count * sizeof(address));
   address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
 
@@ -550,7 +553,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   setlocale(LC_ALL, "");
-  size_t overhead_NMT = headers * MemTracker::overhead_per_malloc();
+  long int overhead_NMT = headers * MemTracker::overhead_per_malloc();
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary [\"-XX:NativeMemoryTracking=%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
@@ -681,33 +684,33 @@ void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* p
   NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, (address)old, stack);
 }
 
-void NMT_MemoryLogRecorder::print(Entry *e) {
-  if (e == nullptr) {
-    fprintf(stderr, "nullptr\n");
-  } else {
-    if (IS_FREE(e)) {
-      fprintf(stderr, "           FREE: ");
-    } else if (IS_REALLOC(e)) {
-      fprintf(stderr, "        REALLOC: ");
-    } else if (IS_MALLOC(e)) {
-      fprintf(stderr, "         MALLOC: ");
-    }
-    fprintf(stderr, "time:%15ld, thread:%6ld, ptr:%14p, old:%14p, requested:%8ld, actual:%8ld, mem_tag:%s\n", e->time, e->thread, e->ptr, e->old, e->requested, e->actual, NMTUtil::tag_to_name(NMTUtil::index_to_tag((int)e->mem_tag)));
-  }
-}
+//void NMT_MemoryLogRecorder::print(Entry *e) {
+//  if (e == nullptr) {
+//    fprintf(stderr, "nullptr\n");
+//  } else {
+//    if (IS_FREE(e)) {
+//      fprintf(stderr, "           FREE: ");
+//    } else if (IS_REALLOC(e)) {
+//      fprintf(stderr, "        REALLOC: ");
+//    } else if (IS_MALLOC(e)) {
+//      fprintf(stderr, "         MALLOC: ");
+//    }
+//    fprintf(stderr, "time:%15ld, thread:%6ld, ptr:%14p, old:%14p, requested:%8ld, actual:%8ld, mem_tag:%s\n", e->time, e->thread, e->ptr, e->old, e->requested, e->actual, NMTUtil::tag_to_name(NMTUtil::index_to_tag((int)e->mem_tag)));
+//  }
+//}
 
-static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) {
-  switch (type) {
-    case NMT_VirtualMemoryLogRecorder::Type::RESERVE: return "RESERVE"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::RELEASE: return "RELEASE"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT: return "UNCOMMIT"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT: return "RESERVE_AND_COMMIT"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::COMMIT: return "COMMIT"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED: return "SPLIT_RESERVED"; break;
-    case NMT_VirtualMemoryLogRecorder::Type::TAG: return "TAG"; break;
-    default: break;
-  }
-}
+//static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) {
+//  switch (type) {
+//    case NMT_VirtualMemoryLogRecorder::Type::RESERVE: return "RESERVE"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::RELEASE: return "RELEASE"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT: return "UNCOMMIT"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::RESERVE_AND_COMMIT: return "RESERVE_AND_COMMIT"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::COMMIT: return "COMMIT"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::SPLIT_RESERVED: return "SPLIT_RESERVED"; break;
+//    case NMT_VirtualMemoryLogRecorder::Type::TAG: return "TAG"; break;
+//    default: break;
+//  }
+//}
 
 void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
   //fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %ld)\n", limit, sizeof(Entry));
@@ -767,7 +770,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
     return;
   }
   Entry* records_file_entries = (Entry*)records_fi.ptr;
-  long int count = (records_fi.size / sizeof(Entry));
+  long int count = (long int)(records_fi.size / sizeof(Entry));
 
   long int total = 0;
   //VirtualMemoryTracker::Instance::initialize(NMTUtil::parse_tracking_level(NativeMemoryTracking));
