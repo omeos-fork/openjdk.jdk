@@ -61,20 +61,28 @@
 #include "utilities/vmError.hpp"
 
 #include <locale.h>
-#if defined(LINUX)
-#include <malloc.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/mman.h>
+
+#if defined(LINUX)
+#include <malloc.h>
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #endif
 
 #if defined(LINUX) || defined(__APPLE__)
 #include <pthread.h>
-#include <string.h>
 #include <sys/mman.h>
-#include <string.h>
+#endif
+
+#if defined(_WIN64)
+// TODO: suppress undefined errors for now
+#define PROT_READ
+#define PROT_WRITE
+#define MAP_PRIVATE
+#define STDERR_FILENO
+#define STDOUT_FILENO
 #endif
 
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
@@ -123,7 +131,7 @@ void NMT_LogRecorder::init() {
   pthread_mutex_t _mutex;
   pthread_mutex_init(&_mutex, NULL);
 #elif defined(_WIN64)
- // ???
+ // TODO
 #endif
   _threads_names_counter = 1;
   _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_counter, sizeof(thread_name_info));
@@ -144,7 +152,7 @@ void NMT_LogRecorder::lock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_lock(&_mutex);
 #elif defined(_WIN64)
- // ???
+ // TODO
 #endif
 }
 
@@ -152,7 +160,7 @@ void NMT_LogRecorder::unlock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_unlock(&_mutex);
 #elif defined(_WIN64)
- // ???
+  // TODO
 #endif
 }
 
@@ -193,6 +201,16 @@ void NMT_LogRecorder::logThreadName() {
     _threads_names[_threads_names_counter-1].thread = thread_id();
     strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE);
   }
+}
+
+void *NMT_LogRecorder::mmap(void *addr, size_t len, int prot, int flags, int fd)
+{
+#if defined(LINUX) || defined(__APPLE__)
+  return ::mmap(addr, len, prot, flags, fd, 0);
+#elif defined(_WIN64)
+  // TODO
+  return nullptr;
+#endif
 }
 
 size_t NMT_LogRecorder::mallocSize(void* ptr)
@@ -316,7 +334,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
   info.size = file_info.st_size;
   ::lseek(info.fd, 0, SEEK_SET);
 
-  info.ptr = ::mmap(NULL, info.size, PROT_READ, MAP_PRIVATE, info.fd, 0);
+  info.ptr = NMT_LogRecorder::mmap(NULL, info.size, PROT_READ, MAP_PRIVATE, info.fd);
   assert(info.ptr != MAP_FAILED, "info.ptr != MAP_FAILED");
 
   FREE_C_HEAP_ARRAY(char, file_path);
@@ -412,7 +430,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   Entry* records_file_entries = (Entry*)records_fi.ptr;
   long int count = (long int)(records_fi.size / sizeof(Entry));
   long int size_pointers = (long int)(count * sizeof(address));
-  address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
+  address *pointers = (address*)NMT_LogRecorder::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1);
   assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
 
   // open benchmark file for writing the final results
@@ -556,7 +574,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   long int overhead_NMT = headers * MemTracker::overhead_per_malloc();
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
-  fprintf(stderr, "\n\n\nmalloc summary [\"-XX:NativeMemoryTracking=%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
+  fprintf(stderr, "\n\n\nmalloc summary [recorded NMT mode \"%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
   fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
   fprintf(stderr, "memory requested:%'ld bytes, allocated:%'ld bytes\n", requestedTotal, actualTotal);
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
