@@ -322,7 +322,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
 }
 
 void NMT_MemoryLogRecorder::initialize(intx limit) {
-  //fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
+  //fprintf(stderr, "> NMT_MemoryLogRecorder::initialize(%ld, %ld)\n", limit, sizeof(Entry));
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -555,9 +555,9 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary [\"-XX:NativeMemoryTracking=%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
   fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
-  fprintf(stderr, "memory requested:%'zu bytes, allocated:%'zu bytes\n", requestedTotal, actualTotal);
+  fprintf(stderr, "memory requested:%'ld bytes, allocated:%'ld bytes\n", requestedTotal, actualTotal);
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
-  fprintf(stderr, "malloc overhead=%'zu bytes [%2.2f%%], NMT headers overhead=%'zu bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
+  fprintf(stderr, "malloc overhead=%'ld bytes [%2.2f%%], NMT headers overhead=%'ld bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
   fprintf(stderr, "\n");
 
   fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "objects%", "bytes%", "time%", "overhead%");
@@ -710,7 +710,7 @@ static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) 
 }
 
 void NMT_VirtualMemoryLogRecorder::initialize(intx limit) {
-  //fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %zu)\n", limit, sizeof(Entry));
+  //fprintf(stderr, "> NMT_VirtualMemoryLogRecorder::initialize(%ld, %ld)\n", limit, sizeof(Entry));
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   recorder->init();
   recorder->lock();
@@ -790,17 +790,17 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
     {
       switch (e->type) {
         case NMT_VirtualMemoryLogRecorder::Type::RESERVE:
-          //fprintf(stderr, "[record_virtual_memory_reserve(%p, %zu, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
+          //fprintf(stderr, "[record_virtual_memory_reserve(%p, %ld, %p, %hhu)\n", e->ptr, e->size, &stack, mem_tag);fflush(stderr);
           MemTracker::record_virtual_memory_reserve(e->ptr, e->size, stack, mem_tag);
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
         case NMT_VirtualMemoryLogRecorder::Type::RELEASE:
-          //fprintf(stderr, "[record_virtual_memory_release(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+          //fprintf(stderr, "[record_virtual_memory_release(%p, %ld)\n", e->ptr, e->size);fflush(stderr);
           MemTracker::record_virtual_memory_release(e->ptr, e->size);
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
         case NMT_VirtualMemoryLogRecorder::Type::UNCOMMIT:
-          //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %zu)\n", e->ptr, e->size);fflush(stderr);
+          //fprintf(stderr, "<record_virtual_memory_uncommit(%p, %ld)\n", e->ptr, e->size);fflush(stderr);
           MemTracker::record_virtual_memory_uncommit(e->ptr, e->size);
           //fprintf(stderr, ">\n");fflush(stderr);
           break;
@@ -810,7 +810,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
         case NMT_VirtualMemoryLogRecorder::Type::COMMIT:
-          //fprintf(stderr, "[record_virtual_memory_commit(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+          //fprintf(stderr, "[record_virtual_memory_commit(%p, %ld, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
           MemTracker::record_virtual_memory_commit(e->ptr, e->size, stack);
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
@@ -820,7 +820,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
         case NMT_VirtualMemoryLogRecorder::Type::TAG:
-          //fprintf(stderr, "[record_virtual_memory_type(%p, %zu, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
+          //fprintf(stderr, "[record_virtual_memory_type(%p, %ld, %p)\n", e->ptr, e->size, &stack);fflush(stderr);
           MemTracker::record_virtual_memory_tag(e->ptr, mem_tag);
           //fprintf(stderr, "]\n");fflush(stderr);
           break;
@@ -853,7 +853,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
 }
 
 void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {
-  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::log (%s, %hhu, %hhu, %zu, %zu, %p, %p)\n",
+  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::log (%s, %hhu, %hhu, %ld, %ld, %p, %p)\n",
   //        type_to_name(type), mem_tag, mem_tag_split, size, size_split, ptr, stack);fflush(stderr);
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   if (recorder->lockIfNotDone()) {
