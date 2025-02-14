@@ -419,8 +419,9 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   Entry* records_file_entries = (Entry*)records_fi.ptr;
   long int count = (long int)(records_fi.size / sizeof(Entry));
   long int size_pointers = (long int)(count * sizeof(address));
+  address *pointers = nullptr;
 #if !defined(_WIN64)
-  address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
+  pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
 #endif
 
@@ -863,9 +864,9 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
   }
   fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
 #if defined(_WIN64)
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
-#else
   fprintf(stderr, "time:%ld[ns] [samples:%ld]\n", total, count);
+#else
+  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
 #endif
 //    if (count > 0) {
 //      nullStream bench_null;
