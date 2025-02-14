@@ -420,7 +420,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   long int count = (long int)(records_fi.size / sizeof(Entry));
   long int size_pointers = (long int)(count * sizeof(address));
 #if !defined(_WIN64)
-  address *pointers = (address*)NMT_LogRecorder::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1);
+  address *pointers = (address*)::mmap(NULL, size_pointers, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   assert(pointers != MAP_FAILED, "pointers != MAP_FAILED");
 #endif
 
