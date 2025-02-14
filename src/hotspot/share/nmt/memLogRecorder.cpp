@@ -325,7 +325,7 @@ static file_info _open_file_and_read(const char* pattern, const char* path, int 
   info.ptr = ::mmap(NULL, info.size, PROT_READ, MAP_PRIVATE, info.fd, 0);
   assert(info.ptr != MAP_FAILED, "info.ptr != MAP_FAILED");
 #endif
-  
+
   FREE_C_HEAP_ARRAY(char, file_path);
 
   return info;
@@ -648,7 +648,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
 #if !defined(_WIN64)
   munmap((void*)pointers, size_pointers);
 #endif
-  
+
   recorder->unlock();
 
   os::exit(0);
