@@ -78,11 +78,11 @@
 
 #if defined(_WIN64)
 // TODO: suppress undefined errors for now
-#define PROT_READ
-#define PROT_WRITE
-#define MAP_PRIVATE
-#define STDERR_FILENO
-#define STDOUT_FILENO
+#define PROT_READ 0x01
+#define PROT_WRITE 0x02
+#define MAP_PRIVATE 0x0002
+#define STDERR_FILENO 1
+#define STDOUT_FILENO 1
 #endif
 
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
@@ -131,7 +131,7 @@ void NMT_LogRecorder::init() {
   pthread_mutex_t _mutex;
   pthread_mutex_init(&_mutex, NULL);
 #elif defined(_WIN64)
- // TODO
+  // TODO: NMT_LogRecorder::init
 #endif
   _threads_names_counter = 1;
   _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_counter, sizeof(thread_name_info));
@@ -152,7 +152,7 @@ void NMT_LogRecorder::lock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_lock(&_mutex);
 #elif defined(_WIN64)
- // TODO
+  // TODO: NMT_LogRecorder::lock
 #endif
 }
 
@@ -160,7 +160,7 @@ void NMT_LogRecorder::unlock() {
 #if defined(LINUX) || defined(__APPLE__)
   pthread_mutex_unlock(&_mutex);
 #elif defined(_WIN64)
-  // TODO
+  // TODO: NMT_LogRecorder::unlock
 #endif
 }
 
@@ -168,7 +168,7 @@ intx NMT_LogRecorder::thread_id() {
 #if defined(LINUX) || defined(__APPLE__)
   return (intx)pthread_self();
 #elif defined(_WIN64)
-  // TODO
+  // TODO: NMT_LogRecorder::thread_id
   return 0;
 #endif
 }
@@ -183,7 +183,7 @@ void NMT_LogRecorder::thread_name(char* buf) {
 #elif defined(LINUX)
   pthread_getname_np(pthread_self(), buf, MAXTHREADNAMESIZE);
 #elif defined(_WIN64)
-  // TODO
+  // TODO: NMT_LogRecorder::thread_name
 #endif
 }
 
@@ -208,7 +208,7 @@ void *NMT_LogRecorder::mmap(void *addr, size_t len, int prot, int flags, int fd)
 #if defined(LINUX) || defined(__APPLE__)
   return ::mmap(addr, len, prot, flags, fd, 0);
 #elif defined(_WIN64)
-  // TODO
+  // TODO: NMT_LogRecorder::mmap
   return nullptr;
 #endif
 }
@@ -263,7 +263,7 @@ static void _write_and_check(int fd, const void *buf, size_t count) {
     //assert(false, "fd: %d", fd);
   }
   errno = 0;
-  ssize_t written = ::write(fd, buf, count);
+  ssize_t written = (ssize_t)::write(fd, buf, count);
   if ((long)written != (long)count) {
     int e = errno;
     fprintf(stderr, "write_and_check(%d) ERROR:[%s]\n", fd, os::strerror(e));
@@ -480,8 +480,8 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
           client_ptr = (address)os::malloc(e->requested, mem_tag, stack);
         }
         end = os::javaTimeNanos();
-        requested = e->requested;
-        actual = e->actual;
+        requested = (long int)e->requested;
+        actual = (long int)e->actual;
         pointers[i] = client_ptr;
         if (mem_tag == mtNone) {
           fprintf(stderr, "MALLOC?\n");
@@ -493,15 +493,15 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
           Entry *p = &records_file_entries[j];
           if (e->old == p->ptr) {
             address ptr = pointers[j];
-            requested -= p->requested;
-            actual -= p->actual;
+            requested -= (long int)p->requested;
+            actual -= (long int)p->actual;
             start = os::javaTimeNanos();
             {
               ptr = (address)os::realloc(ptr, e->requested, mem_tag, stack);
             }
             end = os::javaTimeNanos();
-            requested += e->requested;
-            actual += e->actual;
+            requested += (long int)e->requested;
+            actual += (long int)e->actual;
             pointers[i] = ptr;
             pointers[j] = nullptr;
             break;
@@ -518,8 +518,8 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
           if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
             mem_tag = NMTUtil::index_to_tag((int)p->mem_tag);
             void* ptr = pointers[j];
-            requested -= p->requested;
-            actual -= p->actual;
+            requested -= (long int)p->requested;
+            actual -= (long int)p->actual;
             start = os::javaTimeNanos();
             {
               os::free(ptr);
@@ -571,16 +571,25 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   setlocale(LC_ALL, "");
-  long int overhead_NMT = headers * MemTracker::overhead_per_malloc();
+  long int overhead_NMT = (long int)(headers * MemTracker::overhead_per_malloc());
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary [recorded NMT mode \"%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
+#if defined(_WIN64)
+  fprintf(stderr, "time:%ld[ns] [samples:%ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
+  fprintf(stderr, "memory requested:%ld bytes, allocated:%ld bytes\n", requestedTotal, actualTotal);
+#else
+  fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%'ld]\n", nanoseconds, count, headers);
   fprintf(stderr, "memory requested:%'ld bytes, allocated:%'ld bytes\n", requestedTotal, actualTotal);
+#endif
   double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
+#if defined(_WIN64)
+  fprintf(stderr, "malloc overhead=%ld bytes [%2.2f%%], NMT headers overhead=%ld bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
+  fprintf(stderr, "\n");
+#else
   fprintf(stderr, "malloc overhead=%'ld bytes [%2.2f%%], NMT headers overhead=%'ld bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
   fprintf(stderr, "\n");
-
+#endif
   fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "objects%", "bytes%", "time%", "overhead%");
   fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
   for (int i = 0; i < mt_number_of_tags; i++) {
