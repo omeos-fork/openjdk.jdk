@@ -62,7 +62,6 @@
 
 #include <locale.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 
 #if defined(LINUX)
@@ -74,6 +73,7 @@
 #if defined(LINUX) || defined(__APPLE__)
 #include <pthread.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #endif
 
 #if defined(_WIN64)
