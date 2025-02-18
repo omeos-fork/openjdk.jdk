@@ -57,13 +57,13 @@ public:
   static void replay();
   static void logThreadName(const char* name);
   static size_t mallocSize(void* ptr);
+  static intx thread_id();
 
 public:
   void init();
   bool lockIfNotDone();
   void lock();
   void unlock();
-  intx thread_id();
   void thread_name(char* buf);
   bool done() {
     return _done;

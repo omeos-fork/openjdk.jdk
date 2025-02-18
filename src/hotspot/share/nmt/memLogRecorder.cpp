@@ -78,11 +78,13 @@
 
 #if defined(_WIN64)
 #define LD_FORMAT "%ld"
+#define LD_FORMAT2 "%10ld"
 // TODO: suppress undefined errors for now
 #define STDERR_FILENO 2
 #define STDOUT_FILENO 1
 #else
 #define LD_FORMAT "%'ld"
+#define LD_FORMAT2 "%'10ld"
 #endif
 
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
@@ -414,6 +416,19 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     tty->print("(Can not be used for memory usage comparison)\n");
   }
 
+  file_info threads_fi = _open_file_and_read(THREADS_LOG_FILE, path, pid);
+  if (threads_fi.fd == -1) {
+    return;
+  }
+  thread_name_info* thread_entries = (thread_name_info*)threads_fi.ptr;
+  long int countThreads = (long int)(threads_fi.size / sizeof(thread_name_info));
+  long int* histogramsThreads = nullptr;
+#if !defined(_WIN64)
+  long int size_threads = (long int)(countThreads * sizeof(long int));
+  histogramsThreads = (long int*)::mmap(NULL, size_threads, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
+  assert(histogramsThreads != MAP_FAILED, "histogramsThreads != MAP_FAILED");
+#endif
+
   // open records file for reading the memory allocations to "play back"
   file_info records_fi = _open_file_and_read(ALLOCS_LOG_FILE, path, pid);
   if (records_fi.fd == -1) {
@@ -556,6 +571,13 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     _write_and_check(benchmark_fd, &type, sizeof(type));
     //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALLOC(e), IS_REALLOC(e), IS_FREE(e));
 
+    for (int i = 0; i < countThreads; i++) {
+      if (e->thread == thread_entries[i].thread) {
+        histogramsThreads[i]++;
+        break;
+      }
+    }
+
     HistogramBuckets* histogram = &histogramByCategory[NMTUtil::tag_to_index(mem_tag)];
     for (int s = histogramLimitsSize; s >= 0; s--) {
       if (actual >= histogramLimits[s]) {
@@ -627,7 +649,20 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     }
   }
 
+  fprintf(stderr, "\n\n");
+  fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
+  fprintf(stderr, "threads info:\n\n");
+  for (int i = 1; i < countThreads; i++) {
+    double percentageOps = 100.0 * (double)histogramsThreads[i] / (double)count;
+    if (percentageOps < 10.0) {
+      fprintf(stderr, "%32s: " LD_FORMAT2 " [ops]     %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
+    } else {
+      fprintf(stderr, "%32s: " LD_FORMAT2 " [ops]    %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
+    }
+  }
+
   _close_and_check(log_fi.fd);
+  _close_and_check(threads_fi.fd);
   _close_and_check(records_fi.fd);
   _close_and_check(benchmark_fd);
   FREE_C_HEAP_ARRAY(char, benchmark_file_path);
@@ -640,6 +675,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 #if !defined(_WIN64)
   munmap((void*)pointers, size_pointers);
+  munmap((void*)histogramsThreads, size_threads);
 #endif
 
   recorder->unlock();
@@ -658,7 +694,7 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       if (MemTracker::is_initialized()) {
         entry.time = os::javaTimeNanos();
       }
-      entry.thread = os::current_thread_id();
+      entry.thread = NMT_LogRecorder::thread_id();
       entry.ptr = ptr;
       entry.old = old;
       entry.requested = requested;
@@ -771,15 +807,6 @@ void NMT_VirtualMemoryLogRecorder::finish(void) {
 void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
   //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::replay(\"%s\", %d)\n", path, pid);
   static const char *path = ".";
-  // compare the recorded and current levels of NMT and exit if different
-  //    file_info log_fi = _open_file_and_read(INFO_LOG_FILE, path, pid);
-  //    size_t* status_file_bytes = (size_t*)log_fi.ptr;
-  //    NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
-  //    if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
-  //      tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
-  //      tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-  //      os::exit(-1);
-  //    }
 
   // open records file for reading the virtual memory allocations to "play back"
   file_info records_fi = _open_file_and_read(VALLOCS_LOG_FILE, path, pid);
