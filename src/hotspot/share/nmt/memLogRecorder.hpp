@@ -57,7 +57,6 @@ public:
   static void replay();
   static void logThreadName(const char* name);
   static size_t mallocSize(void* ptr);
-  static void *mmap(void *addr, size_t len, int prot, int flags, int fd);
 
 public:
   void init();

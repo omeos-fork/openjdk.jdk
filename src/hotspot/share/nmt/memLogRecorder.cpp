@@ -77,9 +77,12 @@
 #endif
 
 #if defined(_WIN64)
+#define LD_FORMAT "%ld"
 // TODO: suppress undefined errors for now
 #define STDERR_FILENO 2
 #define STDOUT_FILENO 1
+#else
+#define LD_FORMAT "%'ld"
 #endif
 
 NMT_MemoryLogRecorder NMT_MemoryLogRecorder::_recorder;
@@ -405,10 +408,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
   size_t* status_file_bytes = (size_t*)log_fi.ptr;
   NMT_TrackingLevel recorded_nmt_level = (NMT_TrackingLevel)status_file_bytes[0];
-  if (NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level) {
-    tty->print("NativeMemoryTracking mismatch [%u != %u].\n", recorded_nmt_level, NMTUtil::parse_tracking_level(NativeMemoryTracking));
-    tty->print("Re-run with \"-XX:NativeMemoryTracking=%s\"\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-    os::exit(-1);
+  bool timeOnly = NMTUtil::parse_tracking_level(NativeMemoryTracking) != recorded_nmt_level;
+  if (timeOnly) {
+    tty->print("\n\nNativeMemoryTracking mismatch [%s != %s].\n", NMTUtil::tracking_level_to_string(recorded_nmt_level), NMTUtil::tracking_level_to_string(NMTUtil::parse_tracking_level(NativeMemoryTracking)));
+    tty->print("(Can not be used for memory usage comparison)\n");
   }
 
   // open records file for reading the memory allocations to "play back"
@@ -567,72 +570,61 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary [recorded NMT mode \"%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
-#if defined(_WIN64)
-  fprintf(stderr, "time:%ld[ns] [samples:%ld] [NMT headers:%ld]\n", nanoseconds, count, headers);
-  fprintf(stderr, "memory requested:%ld bytes, allocated:%ld bytes\n", requestedTotal, actualTotal);
-#else
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld] [NMT headers:%'ld]\n", nanoseconds, count, headers);
-  fprintf(stderr, "memory requested:%'ld bytes, allocated:%'ld bytes\n", requestedTotal, actualTotal);
-#endif
-  double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
-#if defined(_WIN64)
-  fprintf(stderr, "malloc overhead=%ld bytes [%2.2f%%], NMT headers overhead=%ld bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
-  fprintf(stderr, "\n");
-#else
-  fprintf(stderr, "malloc overhead=%'ld bytes [%2.2f%%], NMT headers overhead=%'ld bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
-  fprintf(stderr, "\n");
-#endif
-  fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "objects%", "bytes%", "time%", "overhead%");
-  fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
-  for (int i = 0; i < mt_number_of_tags; i++) {
-    double overhead = 0.0;
-    if (requestedByCategory[i] > 0) {
-      overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
-    }
-#if defined(_WIN64)
-    fprintf(stderr, "%22s: %12ld  %12ld   %12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
-#else
-    fprintf(stderr, "%22s: %'12ld  %'12ld   %'12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
-#endif
-    double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)headers);
-    if (countPercentage > 10.0) {
-      fprintf(stderr, "        %.1f%%", countPercentage);
-    } else {
-      fprintf(stderr, "         %.1f%%", countPercentage);
-    }
-    double bytesPercentage = 100.0 * ((double)allocatedByCategory[i] / (double)actualTotal);
-    if (bytesPercentage > 10.0) {
-      fprintf(stderr, "         %.1f%%", bytesPercentage);
-    } else {
-      fprintf(stderr, "          %.1f%%", bytesPercentage);
-    }
-    double timePercentage = 100.0 * ((double)timeByCategory[i] / (double)nanoseconds);
-    if (timePercentage > 10.0) {
-      fprintf(stderr, "         %.1f%%", timePercentage);
-    } else {
-      fprintf(stderr, "          %.1f%%", timePercentage);
-    }
-    if (overhead > 100.0) {
-      fprintf(stderr, "        %.1f%%", overhead);
-    } else if (overhead > 10.0) {
-      fprintf(stderr, "         %.1f%%", overhead);
-    } else {
-      fprintf(stderr, "          %.1f%%", overhead);
-    }
-    fprintf(stderr, "    ");
-
-    HistogramBuckets* histogram = &histogramByCategory[i];
-    long int max = 0;
-    for (int s = histogramLimitsSize; s >= 0; s--) {
-      if (histogram->buckets[s] > max) {
-        max = histogram->buckets[s];
-      }
-    }
-    for (int s = 0; s < histogramLimitsSize; s++) {
-      int index = (int)(100.0 * ((double)histogram->buckets[s] / (double)max)) % 8;
-      fprintf(stderr, "%s", histogramChars[index]);
-    }
+  fprintf(stderr, "time:" LD_FORMAT "[ns]\n", nanoseconds);
+  if (!timeOnly) {
+    double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
+    fprintf(stderr, "[samples:" LD_FORMAT "] [NMT headers:" LD_FORMAT "]\n", count, headers);
+    fprintf(stderr, "memory requested:" LD_FORMAT " bytes, allocated:" LD_FORMAT " bytes\n", requestedTotal, actualTotal);
+    fprintf(stderr, "malloc overhead=" LD_FORMAT " bytes [%2.2f%%], NMT headers overhead=" LD_FORMAT " bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
     fprintf(stderr, "\n");
+    fprintf(stderr, "%22s: %12s: %12s: %12s: %12s: %12s: %12s: %12s:\n", "NMT type", "objects", "bytes", "time", "objects%", "bytes%", "time%", "overhead%");
+    fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
+    for (int i = 0; i < mt_number_of_tags; i++) {
+      double overhead = 0.0;
+      if (requestedByCategory[i] > 0) {
+        overhead = 100.0 * ((double)allocatedByCategory[i] - (double)requestedByCategory[i]) / (double)requestedByCategory[i];
+      }
+      fprintf(stderr, "%22s: %'12ld  %'12ld   %'12ld", NMTUtil::tag_to_name(NMTUtil::index_to_tag(i)), nmtObjectsByCategory[i], allocatedByCategory[i], timeByCategory[i]);
+      double countPercentage = 100.0 * ((double)nmtObjectsByCategory[i] / (double)headers);
+      if (countPercentage > 10.0) {
+        fprintf(stderr, "        %.1f%%", countPercentage);
+      } else {
+        fprintf(stderr, "         %.1f%%", countPercentage);
+      }
+      double bytesPercentage = 100.0 * ((double)allocatedByCategory[i] / (double)actualTotal);
+      if (bytesPercentage > 10.0) {
+        fprintf(stderr, "         %.1f%%", bytesPercentage);
+      } else {
+        fprintf(stderr, "          %.1f%%", bytesPercentage);
+      }
+      double timePercentage = 100.0 * ((double)timeByCategory[i] / (double)nanoseconds);
+      if (timePercentage > 10.0) {
+        fprintf(stderr, "         %.1f%%", timePercentage);
+      } else {
+        fprintf(stderr, "          %.1f%%", timePercentage);
+      }
+      if (overhead > 100.0) {
+        fprintf(stderr, "        %.1f%%", overhead);
+      } else if (overhead > 10.0) {
+        fprintf(stderr, "         %.1f%%", overhead);
+      } else {
+        fprintf(stderr, "          %.1f%%", overhead);
+      }
+      fprintf(stderr, "    ");
+
+      HistogramBuckets* histogram = &histogramByCategory[i];
+      long int max = 0;
+      for (int s = histogramLimitsSize; s >= 0; s--) {
+        if (histogram->buckets[s] > max) {
+          max = histogram->buckets[s];
+        }
+      }
+      for (int s = 0; s < histogramLimitsSize; s++) {
+        int index = (int)(100.0 * ((double)histogram->buckets[s] / (double)max)) % 8;
+        fprintf(stderr, "%s", histogramChars[index]);
+      }
+      fprintf(stderr, "\n");
+    }
   }
 
   _close_and_check(log_fi.fd);
@@ -863,11 +855,7 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
     total += duration;
   }
   fprintf(stderr, "\n\n\nVirtualMemoryTracker summary:\n\n\n");
-#if defined(_WIN64)
-  fprintf(stderr, "time:%ld[ns] [samples:%ld]\n", total, count);
-#else
-  fprintf(stderr, "time:%'ld[ns] [samples:%'ld]\n", total, count);
-#endif
+  fprintf(stderr, "time:" LD_FORMAT "[ns] [samples:" LD_FORMAT "]\n", total, count);
 //    if (count > 0) {
 //      nullStream bench_null;
 //      total = 0;
