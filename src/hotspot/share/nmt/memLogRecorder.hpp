@@ -44,12 +44,13 @@ protected:
   intx _count  = 0;
   int _log_fd;
   volatile bool _done = true;
-  volatile size_t _threads_names_counter = 0;
+  volatile size_t _threads_names_size = 0;
   typedef struct thread_name_info {
     char name[MAXTHREADNAMESIZE];
     intx thread;
   } thread_name_info;
   thread_name_info *_threads_names = nullptr;
+  intx access[1024];
 
 public:
   static void initialize();
@@ -64,7 +65,7 @@ public:
   bool lockIfNotDone();
   void lock();
   void unlock();
-  void thread_name(char* buf);
+  void get_thread_name(char* buf);
   bool done() {
     return _done;
   }

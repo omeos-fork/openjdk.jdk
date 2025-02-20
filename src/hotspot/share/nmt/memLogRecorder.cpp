@@ -135,8 +135,8 @@ void NMT_LogRecorder::init() {
 #elif defined(_WIN64)
   // TODO: NMT_LogRecorder::init
 #endif
-  _threads_names_counter = 1;
-  _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_counter, sizeof(thread_name_info));
+  _threads_names_size = 1;
+  _threads_names = (thread_name_info*)permit_forbidden_function::calloc(_threads_names_size, sizeof(thread_name_info));
   _done = true;
   _count = 0;
 }
@@ -167,15 +167,20 @@ void NMT_LogRecorder::unlock() {
 }
 
 intx NMT_LogRecorder::thread_id() {
-#if defined(LINUX) || defined(__APPLE__)
-  return (intx)pthread_self();
-#elif defined(_WIN64)
-  // TODO: NMT_LogRecorder::thread_id
-  return 0;
-#endif
+  return os::current_thread_id();
+//#if defined(LINUX) || defined(__APPLE__)
+//  intx tid = (intx)pthread_self();
+//  if (tid == 0) {
+//    fprintf(stderr, "NMT_LogRecorder::thread_id: %6ld\n", tid);
+//  }
+//  return tid;
+//#elif defined(_WIN64)
+//  // TODO: NMT_LogRecorder::thread_id
+//  return 0;
+//#endif
 }
 
-void NMT_LogRecorder::thread_name(char* buf) {
+void NMT_LogRecorder::get_thread_name(char* buf) {
 #if defined(__APPLE__)
   if (pthread_main_np()) {
     strcpy(buf, "main");
@@ -189,20 +194,33 @@ void NMT_LogRecorder::thread_name(char* buf) {
 #endif
 }
 
+// first time we see a new thread id, we add it
+// second time we see a thread we get its name
 void NMT_LogRecorder::logThreadName() {
-  for (size_t i = 0; i < _threads_names_counter; i++) {
-    if (_threads_names[i].thread == thread_id()) {
-      return;
+  NMT_LogRecorder::lock();
+  {
+    bool found = false;
+    intx tid = NMT_LogRecorder::thread_id();
+    for (size_t i = 0; i < _threads_names_size; i++) {
+      if (_threads_names[i].thread == tid) {
+        found = true;
+        if (_threads_names[i].name[0] == 0) {
+          NMT_LogRecorder::get_thread_name(_threads_names[i].name);
+          //fprintf(stderr, " got name for thread %6ld:%lx [%s]\n", tid, tid, _threads_names[i].name);
+        }
+        break;
+      }
+    }
+    if (!found) {
+      //fprintf(stderr, " added:%6ld:%lx [%6zu]\n", tid, tid, _threads_names_size);
+      size_t i = _threads_names_size-1;
+      _threads_names[i].thread = tid;
+      _threads_names[i].name[0] = 0;
+      _threads_names_size++;
+      _threads_names = (thread_name_info*)permit_forbidden_function::realloc((void*)_threads_names, _threads_names_size*sizeof(thread_name_info));
     }
   }
-  static char name[MAXTHREADNAMESIZE];
-  thread_name(name);
-  if (strlen(name) > 0) {
-    _threads_names_counter++;
-    _threads_names = (thread_name_info*)permit_forbidden_function::realloc((void*)_threads_names, (_threads_names_counter+1)*sizeof(thread_name_info));
-    _threads_names[_threads_names_counter-1].thread = thread_id();
-    strncpy((char*)_threads_names[_threads_names_counter-1].name, name, MAXTHREADNAMESIZE);
-  }
+  NMT_LogRecorder::unlock();
 }
 
 size_t NMT_LogRecorder::mallocSize(void* ptr)
@@ -367,7 +385,7 @@ void NMT_MemoryLogRecorder::finish(void) {
     int threads_fd = _prepare_log_file(nullptr, THREADS_LOG_FILE);
     //fprintf(stderr, " threads_fd:%d\n", threads_fd);
     if (threads_fd != -1) {
-      _write_and_check(threads_fd, recorder->_threads_names, recorder->_threads_names_counter*sizeof(thread_name_info));
+      _write_and_check(threads_fd, recorder->_threads_names, (recorder->_threads_names_size-1)*sizeof(thread_name_info));
       threads_fd = _close_and_check(threads_fd);
       //fprintf(stderr, " threads_fd:%d\n", threads_fd);
     }
@@ -428,6 +446,9 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   histogramsThreads = (long int*)::mmap(NULL, size_threads, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   assert(histogramsThreads != MAP_FAILED, "histogramsThreads != MAP_FAILED");
 #endif
+//  for (int i = 0; i < countThreads; i++) {
+//    fprintf(stderr, "thread: %64s:%6ld\n", thread_entries[i].name, thread_entries[i].thread);
+//  }
 
   // open records file for reading the memory allocations to "play back"
   file_info records_fi = _open_file_and_read(ALLOCS_LOG_FILE, path, pid);
@@ -571,11 +592,18 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     _write_and_check(benchmark_fd, &type, sizeof(type));
     //fprintf(stderr, " %9ld:%9ld:%9ld %d:%d:%d\n", requested, actual, duration, IS_MALLOC(e), IS_REALLOC(e), IS_FREE(e));
 
+    bool found = false;
     for (int i = 0; i < countThreads; i++) {
       if (e->thread == thread_entries[i].thread) {
         histogramsThreads[i]++;
+        found = true;
         break;
       }
+    }
+
+    if (!found) {
+      fprintf(stderr, "NOT FOUND: %6ld\n", thread_entries[i].thread);
+      NMT_MemoryLogRecorder::print(e);
     }
 
     HistogramBuckets* histogram = &histogramByCategory[NMTUtil::tag_to_index(mem_tag)];
@@ -650,14 +678,15 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   fprintf(stderr, "\n\n");
-  fprintf(stderr, "-------------------------------------------------------------------------------------------------------------------------\n");
-  fprintf(stderr, "threads info:\n\n");
-  for (int i = 1; i < countThreads; i++) {
+  fprintf(stderr, "threads allocations info:\n\n");
+  fprintf(stderr, "%64s: %15s: %8s:\n", "thread", "operations", "ops%");
+  fprintf(stderr, "--------------------------------------------------------------------------------------------\n");
+  for (int i = 0; i < countThreads; i++) {
     double percentageOps = 100.0 * (double)histogramsThreads[i] / (double)count;
     if (percentageOps < 10.0) {
-      fprintf(stderr, "%32s: " LD_FORMAT2 " [ops]     %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
+      fprintf(stderr, "%64s: " LD_FORMAT2 " [ops]     %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
     } else {
-      fprintf(stderr, "%32s: " LD_FORMAT2 " [ops]    %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
+      fprintf(stderr, "%64s: " LD_FORMAT2 " [ops]    %.2f%%\n", thread_entries[i].name, histogramsThreads[i], percentageOps);
     }
   }
 
@@ -737,20 +766,20 @@ void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* p
   NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, (address)old, stack);
 }
 
-//void NMT_MemoryLogRecorder::print(Entry *e) {
-//  if (e == nullptr) {
-//    fprintf(stderr, "nullptr\n");
-//  } else {
-//    if (IS_FREE(e)) {
-//      fprintf(stderr, "           FREE: ");
-//    } else if (IS_REALLOC(e)) {
-//      fprintf(stderr, "        REALLOC: ");
-//    } else if (IS_MALLOC(e)) {
-//      fprintf(stderr, "         MALLOC: ");
-//    }
-//    fprintf(stderr, "time:%15ld, thread:%6ld, ptr:%14p, old:%14p, requested:%8ld, actual:%8ld, mem_tag:%s\n", e->time, e->thread, e->ptr, e->old, e->requested, e->actual, NMTUtil::tag_to_name(NMTUtil::index_to_tag((int)e->mem_tag)));
-//  }
-//}
+void NMT_MemoryLogRecorder::print(Entry *e) {
+  if (e == nullptr) {
+    fprintf(stderr, "nullptr\n");
+  } else {
+    if (IS_FREE(e)) {
+      fprintf(stderr, "           FREE: ");
+    } else if (IS_REALLOC(e)) {
+      fprintf(stderr, "        REALLOC: ");
+    } else if (IS_MALLOC(e)) {
+      fprintf(stderr, "         MALLOC: ");
+    }
+    fprintf(stderr, "time:%15ld, thread:%6ld, ptr:%14p, old:%14p, requested:%8ld, actual:%8ld, mem_tag:%s\n", e->time, e->thread, e->ptr, e->old, e->requested, e->actual, NMTUtil::tag_to_name(NMTUtil::index_to_tag((int)e->mem_tag)));
+  }
+}
 
 //static inline const char* type_to_name(NMT_VirtualMemoryLogRecorder::Type type) {
 //  switch (type) {
@@ -912,7 +941,7 @@ void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type,
       {
         entry.time = os::javaTimeNanos();
       }
-      entry.thread = os::current_thread_id();
+      entry.thread = NMT_LogRecorder::thread_id();
       entry.ptr = ptr;
       entry.mem_tag = (jlong)mem_tag;
       entry.mem_tag_split = (jlong)mem_tag_split;
