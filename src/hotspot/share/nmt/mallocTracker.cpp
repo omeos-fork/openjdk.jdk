@@ -178,8 +178,6 @@ void* MallocTracker::record_malloc(void* malloc_base, size_t size, MemTag mem_ta
     MallocSiteTable::allocation_at(stack, size, &mst_marker, mem_tag);
   }
 
-  NMT_MemoryLogRecorder::log_malloc(mem_tag, size, malloc_base, &stack, old_malloc_base);
-
   // Uses placement global new operator to initialize malloc header
   MallocHeader* const header = ::new (malloc_base)MallocHeader(size, mem_tag, mst_marker);
   void* const memblock = (void*)((char*)malloc_base + sizeof(MallocHeader));
@@ -209,8 +207,6 @@ void* MallocTracker::record_free_block(void* memblock) {
   deaccount(header->free_info());
 
   header->mark_block_as_dead();
-
-  NMT_MemoryLogRecorder::log_free(header);
 
   return (void*)header;
 }

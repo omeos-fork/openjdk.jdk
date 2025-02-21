@@ -363,7 +363,6 @@ void NMT_MemoryLogRecorder::initialize(intx limit) {
     recorder->_limit = limit;
     if (recorder->_limit > 0) {
       recorder->_log_fd = _prepare_log_file(nullptr, ALLOCS_LOG_FILE);
-      //fprintf(stderr, ">> _memLogRecorder._log_fd:%d\n", recorder->_log_fd);
       recorder->_done = false;
     } else {
       recorder->_done = true;
@@ -404,6 +403,7 @@ void NMT_MemoryLogRecorder::finish(void) {
     recorder->_done = true;
     recorder->unlock();
   }
+  os::exit(0);
 }
 
 long int histogramLimits[] = {32, 64, 128, 256, 512, 1024, 4096, 8192, 16896};
@@ -475,12 +475,16 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     tty->print("Can't open [%s].", benchmark_file_path);
     os::exit(-1);
   }
+
   long int requestedByCategory[mt_number_of_tags] = {0};
   long int allocatedByCategory[mt_number_of_tags] = {0};
   long int nmtObjectsByCategory[mt_number_of_tags] = {0};
   long int timeByCategory[mt_number_of_tags] = {0};
   HistogramBuckets histogramByCategory[mt_number_of_tags] = {0};
 
+  long int countFree = 0;
+  long int countMalloc = 0;
+  long int countRealloc = 0;
   long int nanoseconds = 0;
   long int requestedTotal = 0;
   long int actualTotal = 0;
@@ -504,25 +508,13 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
     long int start = 0;
     long int end = 0;
     {
-      if (IS_MALLOC(e)) {
-        address client_ptr = nullptr;
-        start = os::javaTimeNanos();
-        {
-          client_ptr = (address)os::malloc(e->requested, mem_tag, stack);
-        }
-        end = os::javaTimeNanos();
-        requested = (long int)e->requested;
-        actual = (long int)e->actual;
-        pointers[i] = client_ptr;
-        if (mem_tag == mtNone) {
-          fprintf(stderr, "MALLOC?\n");
-        }
-      } else if (IS_REALLOC(e)) {
+      if (IS_REALLOC(e)) {
         // the recorded "realloc" was captured in a different process,
         // so find the corresponding "malloc" or "realloc" in this process
         for (off_t j = i-1; j >= 0; j--) {
           Entry *p = &records_file_entries[j];
           if (e->old == p->ptr) {
+            countRealloc++;
             address ptr = pointers[j];
             requested -= (long int)p->requested;
             actual -= (long int)p->actual;
@@ -541,12 +533,27 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
             fprintf(stderr, "REALLOC?\n");
           }
         }
+      } else if (IS_MALLOC(e)) {
+          countMalloc++;
+          address ptr = nullptr;
+          start = os::javaTimeNanos();
+          {
+            ptr = (address)os::malloc(e->requested, mem_tag, stack);
+          }
+          end = os::javaTimeNanos();
+          requested = (long int)e->requested;
+          actual = (long int)e->actual;
+          pointers[i] = ptr;
+          if (mem_tag == mtNone) {
+            fprintf(stderr, "MALLOC?\n");
+          }
       } else if (IS_FREE(e)) {
         // the recorded "free" was captured in a different process,
         // so find the corresponding "malloc" or "realloc" in this process
         for (off_t j = i-1; j >= 0; j--) {
           Entry *p = &records_file_entries[j];
           if ((e->old == p->ptr) || (e->ptr == p->ptr)) {
+            countFree++;
             mem_tag = NMTUtil::index_to_tag((int)p->mem_tag);
             void* ptr = pointers[j];
             requested -= (long int)p->requested;
@@ -574,8 +581,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       requestedByCategory[NMTUtil::tag_to_index(mem_tag)] += requested;
       allocatedByCategory[NMTUtil::tag_to_index(mem_tag)] += actual;
       if (IS_FREE(e)) {
-        headers--;
-        nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
+        if (mem_tag != mtNone) {
+          headers--;
+          nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]--;
+        }
       } else if IS_MALLOC(e) {
         headers++;
         nmtObjectsByCategory[NMTUtil::tag_to_index(mem_tag)]++;
@@ -601,11 +610,6 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
       }
     }
 
-    if (!found) {
-      fprintf(stderr, "NOT FOUND: %6ld\n", thread_entries[i].thread);
-      NMT_MemoryLogRecorder::print(e);
-    }
-
     HistogramBuckets* histogram = &histogramByCategory[NMTUtil::tag_to_index(mem_tag)];
     for (int s = histogramLimitsSize; s >= 0; s--) {
       if (actual >= histogramLimits[s]) {
@@ -616,7 +620,10 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   }
 
   setlocale(LC_ALL, "");
-  long int overhead_NMT = (long int)(headers * MemTracker::overhead_per_malloc());
+  long int overhead_NMT = 0;
+  if (MemTracker::enabled()) {
+    overhead_NMT = (long int)(headers * MemTracker::overhead_per_malloc());
+  }
   long int overhead_malloc = actualTotal - requestedTotal - overhead_NMT;
   double overheadPercentage_malloc = 100.0 * (double)overhead_malloc / (double)requestedTotal;
   fprintf(stderr, "\n\n\nmalloc summary [recorded NMT mode \"%s\"]:\n\n", NMTUtil::tracking_level_to_string(recorded_nmt_level));
@@ -624,6 +631,7 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   if (!timeOnly) {
     double overheadPercentage_NMT = 100.0 * (double)overhead_NMT / (double)requestedTotal;
     fprintf(stderr, "[samples:" LD_FORMAT "] [NMT headers:" LD_FORMAT "]\n", count, headers);
+    fprintf(stderr, "[malloc#:" LD_FORMAT "] [realloc#:" LD_FORMAT "] [free#:" LD_FORMAT "]\n", countMalloc, countRealloc, countFree);
     fprintf(stderr, "memory requested:" LD_FORMAT " bytes, allocated:" LD_FORMAT " bytes\n", requestedTotal, actualTotal);
     fprintf(stderr, "malloc overhead=" LD_FORMAT " bytes [%2.2f%%], NMT headers overhead=" LD_FORMAT " bytes [%2.2f%%]\n", overhead_malloc, overheadPercentage_malloc, overhead_NMT, overheadPercentage_NMT);
     fprintf(stderr, "\n");
@@ -712,9 +720,8 @@ void NMT_MemoryLogRecorder::replay(const int pid) {
   os::exit(0);
 }
 
-void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack){
+void NMT_MemoryLogRecorder::_record(MemTag mem_tag, size_t requested, address ptr, address old, const NativeCallStack *stack){
   NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
-  //fprintf(stderr, "NMT_MemoryLogRecorder::log(%16s, %6ld, %12p, %12p)\n", NMTUtil::tag_to_name(mem_tag), requested, ptr, old);
   if (recorder->lockIfNotDone()) {
     volatile intx count = recorder->_count++;
     if (count < recorder->_limit) {
@@ -726,10 +733,8 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       entry.thread = NMT_LogRecorder::thread_id();
       entry.ptr = ptr;
       entry.old = old;
+      fprintf(stderr, "record %p:%zu:%p\n", ptr, requested, old);fflush(stderr);
       entry.requested = requested;
-      if (entry.requested > 0) {
-        //entry.requested += MemTracker::overhead_per_malloc();
-      }
       entry.actual = 0;
       if (entry.requested > 0) {
         entry.actual = NMT_LogRecorder::mallocSize(ptr);
@@ -738,7 +743,7 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
       entry.mem_tag = (jlong)mem_tag;
       if ((MemTracker::is_initialized()) && (stack != nullptr)) {
         // recording stack frames will make sure that the hashtables
-        // are used, so they get benchmarked
+        // are used, so they get benchmarked as well
         for (int i = 0; i < NMT_TrackingStackDepth; i++) {
           entry.stack[i] = stack->get_frame(i);
         }
@@ -757,13 +762,28 @@ void NMT_MemoryLogRecorder::_log(MemTag mem_tag, size_t requested, address ptr, 
   }
 }
 
-void NMT_MemoryLogRecorder::log_free(void *ptr) {
-  //fprintf(stderr, "NMT_MemoryLogRecorder::log(%16p)\n", ptr);
-  NMT_MemoryLogRecorder::_log(mtNone, 0, (address)ptr, nullptr, nullptr);
+void NMT_MemoryLogRecorder::record_free(void *ptr) {
+  NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
+  if (!recorder->done()) {
+    address resolved_ptr = (address)ptr;
+    if (MemTracker::enabled()) {
+      resolved_ptr = (address)ptr - 16;
+    }
+    NMT_MemoryLogRecorder::_record(mtNone, 0, resolved_ptr, nullptr, nullptr);
+  }
 }
 
-void NMT_MemoryLogRecorder::log_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old) {
-  NMT_MemoryLogRecorder::_log(mem_tag, requested, (address)ptr, (address)old, stack);
+void NMT_MemoryLogRecorder::record_malloc(MemTag mem_tag, size_t requested, void* ptr, const NativeCallStack *stack, void* old) {
+  NMT_MemoryLogRecorder *recorder = NMT_MemoryLogRecorder::instance();
+  if (!recorder->done()) {
+    address resolved_old = (address)old;
+    if (old != nullptr) {
+      if (MemTracker::enabled()) {
+        resolved_old = (address)old - 16;
+      }
+    }
+    NMT_MemoryLogRecorder::_record(mem_tag, requested, (address)ptr, resolved_old, stack);
+  }
 }
 
 void NMT_MemoryLogRecorder::print(Entry *e) {
@@ -927,8 +947,8 @@ void NMT_VirtualMemoryLogRecorder::replay(const int pid) {
   _close_and_check(records_fi.fd);
 }
 
-void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {
-  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::log (%s, %hhu, %hhu, %ld, %ld, %p, %p)\n",
+void NMT_VirtualMemoryLogRecorder::_record(NMT_VirtualMemoryLogRecorder::Type type, MemTag mem_tag, MemTag mem_tag_split, size_t size, size_t size_split, address ptr, const NativeCallStack *stack) {
+  //fprintf(stderr, "NMT_VirtualMemoryLogRecorder::record (%s, %hhu, %hhu, %ld, %ld, %p, %p)\n",
   //        type_to_name(type), mem_tag, mem_tag_split, size, size_split, ptr, stack);fflush(stderr);
   NMT_VirtualMemoryLogRecorder *recorder = NMT_VirtualMemoryLogRecorder::instance();
   if (recorder->lockIfNotDone()) {
@@ -968,30 +988,30 @@ void NMT_VirtualMemoryLogRecorder::_log(NMT_VirtualMemoryLogRecorder::Type type,
   }
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_reserve(void* addr, size_t size, const NativeCallStack& stack, MemTag mem_tag) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::RESERVE, mem_tag, mtNone, size, 0, (address)addr, &stack);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_reserve(void* addr, size_t size, const NativeCallStack& stack, MemTag mem_tag) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::RESERVE, mem_tag, mtNone, size, 0, (address)addr, &stack);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_release(address addr, size_t size) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::RELEASE, mtNone, mtNone, size, 0, (address)addr, nullptr);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_release(address addr, size_t size) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::RELEASE, mtNone, mtNone, size, 0, (address)addr, nullptr);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_uncommit(address addr, size_t size) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::UNCOMMIT, mtNone, mtNone, size, 0, (address)addr, nullptr);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_uncommit(address addr, size_t size) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::UNCOMMIT, mtNone, mtNone, size, 0, (address)addr, nullptr);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_reserve_and_commit(void* addr, size_t size, const NativeCallStack& stack, MemTag mem_tag) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::RESERVE_AND_COMMIT, mem_tag, mtNone, size, 0, (address)addr, &stack);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_reserve_and_commit(void* addr, size_t size, const NativeCallStack& stack, MemTag mem_tag) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::RESERVE_AND_COMMIT, mem_tag, mtNone, size, 0, (address)addr, &stack);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_commit(void* addr, size_t size, const NativeCallStack& stack) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::COMMIT, mtNone, mtNone, size, 0, (address)addr, &stack);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_commit(void* addr, size_t size, const NativeCallStack& stack) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::COMMIT, mtNone, mtNone, size, 0, (address)addr, &stack);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_split_reserved(void* addr, size_t size, size_t split, MemTag mem_tag, MemTag split_mem_tag) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::SPLIT_RESERVED, mem_tag, split_mem_tag, size, split, (address)addr, nullptr);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_split_reserved(void* addr, size_t size, size_t split, MemTag mem_tag, MemTag split_mem_tag) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::SPLIT_RESERVED, mem_tag, split_mem_tag, size, split, (address)addr, nullptr);
 }
 
-void NMT_VirtualMemoryLogRecorder::log_virtual_memory_tag(void* addr, MemTag mem_tag) {
-  NMT_VirtualMemoryLogRecorder::_log(Type::TAG, mem_tag, mtNone, 0, 0, (address)addr, nullptr);
+void NMT_VirtualMemoryLogRecorder::record_virtual_memory_tag(void* addr, MemTag mem_tag) {
+  NMT_VirtualMemoryLogRecorder::_record(Type::TAG, mem_tag, mtNone, 0, 0, (address)addr, nullptr);
 }
